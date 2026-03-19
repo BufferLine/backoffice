@@ -64,7 +64,7 @@ async def recalculate_totals(db: AsyncSession, invoice: Invoice) -> None:
             jurisdiction = get_jurisdiction(company.jurisdiction)
             gst_registered = company.gst_registered
             gst_rate = Decimal(str(company.gst_rate)) if company.gst_rate else Decimal("0")
-            tax_result = jurisdiction.calculate_invoice_tax(subtotal, gst_registered, gst_rate)
+            tax_result = jurisdiction.calculate_invoice_tax(subtotal, gst_registered, gst_rate, tax_inclusive=invoice.tax_inclusive)
             invoice.tax_rate = float(tax_result.tax_rate) if tax_result.tax_rate else None
             invoice.tax_amount = float(tax_result.tax_amount)
         except ValueError:
@@ -75,7 +75,11 @@ async def recalculate_totals(db: AsyncSession, invoice: Invoice) -> None:
         invoice.tax_amount = 0.0
 
     invoice.subtotal_amount = float(subtotal)
-    invoice.total_amount = float(subtotal + Decimal(str(invoice.tax_amount)))
+    if invoice.tax_inclusive:
+        # Tax is already embedded in line item prices; total == subtotal
+        invoice.total_amount = float(subtotal)
+    else:
+        invoice.total_amount = float(subtotal + Decimal(str(invoice.tax_amount)))
     await db.flush()
 
 
@@ -87,6 +91,7 @@ async def create_invoice(
     description: Optional[str] = None,
     payment_method: Optional[str] = None,
     wallet_address: Optional[str] = None,
+    tax_inclusive: bool = False,
 ) -> Invoice:
     """Create a new draft invoice with auto-generated invoice number.
 
@@ -108,6 +113,7 @@ async def create_invoice(
             subtotal_amount=0.0,
             tax_amount=0.0,
             total_amount=0.0,
+            tax_inclusive=tax_inclusive,
         )
         db.add(invoice)
         try:
@@ -166,6 +172,7 @@ async def update_invoice(
     currency: Optional[str] = None,
     payment_method: Optional[str] = None,
     wallet_address: Optional[str] = None,
+    tax_inclusive: Optional[bool] = None,
 ) -> Invoice:
     """Update a draft invoice's fields."""
     if invoice.status != "draft":
@@ -179,6 +186,9 @@ async def update_invoice(
         invoice.payment_method = payment_method
     if wallet_address is not None:
         invoice.wallet_address = wallet_address
+    if tax_inclusive is not None:
+        invoice.tax_inclusive = tax_inclusive
+        await recalculate_totals(db, invoice)
 
     await db.flush()
     return invoice
@@ -395,6 +405,7 @@ async def _generate_invoice_pdf(
             "tax_rate": invoice.tax_rate,
             "tax_amount": invoice.tax_amount,
             "total_amount": invoice.total_amount,
+            "tax_inclusive": invoice.tax_inclusive,
             "description": invoice.description,
             "payment_method": invoice.payment_method,
             "wallet_address": invoice.wallet_address,

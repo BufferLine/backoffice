@@ -14,3 +14,6 @@ from app.models.payroll import Employee, PayrollDeduction, PayrollRun  # noqa: F
 from app.models.task import TaskInstance, TaskTemplate  # noqa: F401
 from app.models.user import ApiToken, Permission, Role, User, role_permissions, user_roles  # noqa: F401
 from app.models.changelog import ChangeLog  # noqa: F401
+from app.models.account import Account  # noqa: F401
+from app.models.transaction import Transaction  # noqa: F401
+from app.models.recurring_commitment import RecurringCommitment  # noqa: F401

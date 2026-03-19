@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, automation, bank_reconciliation, changelog, clients, expenses, exports, invoices, payments, payroll, tasks, users
 from app.api import settings as settings_router
+from app.api import accounts, transactions, recurring_commitments
 from app.api.payroll import employees_router
 from app.config import settings
 from app.database import AsyncSessionLocal
@@ -58,6 +59,9 @@ app.include_router(bank_reconciliation.router, prefix="/api", tags=["bank-reconc
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(changelog.router, prefix="/api/changelog", tags=["changelog"])
+app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
+app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
+app.include_router(recurring_commitments.router, prefix="/api/recurring-commitments", tags=["recurring-commitments"])
 
 
 @app.get("/health")

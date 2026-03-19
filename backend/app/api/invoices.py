@@ -43,6 +43,7 @@ async def create_invoice(
         payment_method=body.payment_method,
         wallet_address=body.wallet_address,
         created_by=current_user.id,
+        tax_inclusive=body.tax_inclusive,
     )
     return InvoiceResponse.model_validate(invoice)
 
@@ -100,6 +101,7 @@ async def update_invoice(
             currency=body.currency,
             payment_method=body.payment_method,
             wallet_address=body.wallet_address,
+            tax_inclusive=body.tax_inclusive,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

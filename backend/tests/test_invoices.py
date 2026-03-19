@@ -299,3 +299,140 @@ async def test_cannot_issue_invoice_without_line_items(client: AsyncClient, auth
     # Try to issue it (should fail - no line items)
     resp = await client.post(f"/api/invoices/{empty_inv_id}/issue", headers=auth_headers)
     assert resp.status_code == 422, f"Expected 422 issuing invoice without line items, got {resp.status_code}"
+
+
+@pytest.mark.asyncio
+async def test_gst_exclusive_calculation(client: AsyncClient, auth_headers: dict):
+    """GST exclusive: subtotal=5000, tax=5000*0.09=450, total=5450."""
+    # Enable GST registration with 9% rate
+    await client.patch(
+        "/api/settings/company",
+        json={"gst_registered": True, "gst_rate": "0.09"},
+        headers=auth_headers,
+    )
+
+    try:
+        # Create exclusive invoice (default)
+        create_resp = await client.post(
+            "/api/invoices",
+            json={"client_id": _client_id, "currency": "SGD", "tax_inclusive": False},
+            headers=auth_headers,
+        )
+        assert create_resp.status_code == 201
+        inv_id = create_resp.json()["id"]
+        assert create_resp.json()["tax_inclusive"] is False
+
+        # Add line item: qty=1, unit_price=5000
+        await client.post(
+            f"/api/invoices/{inv_id}/line-items",
+            json={"description": "Service", "quantity": "1", "unit_price": "5000.00"},
+            headers=auth_headers,
+        )
+
+        # Verify totals
+        resp = await client.get(f"/api/invoices/{inv_id}", headers=auth_headers)
+        body = resp.json()
+        assert float(body["subtotal_amount"]) == 5000.0
+        assert float(body["tax_amount"]) == 450.0, f"Expected tax 450.0, got {body['tax_amount']}"
+        assert float(body["total_amount"]) == 5450.0, f"Expected total 5450.0, got {body['total_amount']}"
+        assert body["tax_inclusive"] is False
+    finally:
+        # Restore original settings
+        await client.patch(
+            "/api/settings/company",
+            json={"gst_registered": False, "gst_rate": None},
+            headers=auth_headers,
+        )
+
+
+@pytest.mark.asyncio
+async def test_gst_inclusive_calculation(client: AsyncClient, auth_headers: dict):
+    """GST inclusive: subtotal=5000 (incl. 9%), tax=5000*0.09/1.09=412.84, total=5000."""
+    # Enable GST registration with 9% rate
+    await client.patch(
+        "/api/settings/company",
+        json={"gst_registered": True, "gst_rate": "0.09"},
+        headers=auth_headers,
+    )
+
+    try:
+        # Create inclusive invoice
+        create_resp = await client.post(
+            "/api/invoices",
+            json={"client_id": _client_id, "currency": "SGD", "tax_inclusive": True},
+            headers=auth_headers,
+        )
+        assert create_resp.status_code == 201
+        inv_id = create_resp.json()["id"]
+        assert create_resp.json()["tax_inclusive"] is True
+
+        # Add line item: qty=1, unit_price=5000 (price already includes GST)
+        await client.post(
+            f"/api/invoices/{inv_id}/line-items",
+            json={"description": "Service (incl. GST)", "quantity": "1", "unit_price": "5000.00"},
+            headers=auth_headers,
+        )
+
+        # Verify totals: tax = 5000 * 0.09 / 1.09 = 412.84, total = 5000
+        resp = await client.get(f"/api/invoices/{inv_id}", headers=auth_headers)
+        body = resp.json()
+        assert float(body["subtotal_amount"]) == 5000.0
+        assert float(body["tax_amount"]) == 412.84, f"Expected tax 412.84, got {body['tax_amount']}"
+        assert float(body["total_amount"]) == 5000.0, f"Expected total 5000.0, got {body['total_amount']}"
+        assert body["tax_inclusive"] is True
+    finally:
+        # Restore original settings
+        await client.patch(
+            "/api/settings/company",
+            json={"gst_registered": False, "gst_rate": None},
+            headers=auth_headers,
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_invoice_tax_inclusive_flag(client: AsyncClient, auth_headers: dict):
+    """Updating tax_inclusive on a draft invoice recalculates totals."""
+    # Enable GST registration with 9% rate
+    await client.patch(
+        "/api/settings/company",
+        json={"gst_registered": True, "gst_rate": "0.09"},
+        headers=auth_headers,
+    )
+
+    try:
+        # Create exclusive invoice and add a line item
+        create_resp = await client.post(
+            "/api/invoices",
+            json={"client_id": _client_id, "currency": "SGD", "tax_inclusive": False},
+            headers=auth_headers,
+        )
+        inv_id = create_resp.json()["id"]
+        await client.post(
+            f"/api/invoices/{inv_id}/line-items",
+            json={"description": "Item", "quantity": "1", "unit_price": "1000.00"},
+            headers=auth_headers,
+        )
+
+        # Verify exclusive totals first: tax=90, total=1090
+        body = (await client.get(f"/api/invoices/{inv_id}", headers=auth_headers)).json()
+        assert float(body["total_amount"]) == 1090.0
+
+        # Switch to inclusive via PATCH
+        patch_resp = await client.patch(
+            f"/api/invoices/{inv_id}",
+            json={"tax_inclusive": True},
+            headers=auth_headers,
+        )
+        assert patch_resp.status_code == 200
+        assert patch_resp.json()["tax_inclusive"] is True
+
+        # Verify inclusive totals: tax=1000*0.09/1.09=82.57, total=1000
+        body = (await client.get(f"/api/invoices/{inv_id}", headers=auth_headers)).json()
+        assert float(body["total_amount"]) == 1000.0
+        assert float(body["tax_amount"]) == 82.57, f"Expected tax 82.57, got {body['tax_amount']}"
+    finally:
+        await client.patch(
+            "/api/settings/company",
+            json={"gst_registered": False, "gst_rate": None},
+            headers=auth_headers,
+        )

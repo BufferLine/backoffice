@@ -35,10 +35,14 @@ def api_patch(path: str, json_data: dict) -> dict:
         return resp.json()
 
 
-def api_delete(path: str) -> None:
+def api_delete(path: str) -> dict:
     with get_client() as client:
         resp = client.delete(path)
         _handle_error(resp)
+        try:
+            return resp.json()
+        except Exception:
+            return {}
 
 
 def _handle_error(resp: httpx.Response) -> None:

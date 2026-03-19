@@ -60,12 +60,23 @@ class SingaporeJurisdiction(JurisdictionBase):
 
         return deductions
 
-    def calculate_invoice_tax(self, subtotal: Decimal, gst_registered: bool, gst_rate: Decimal) -> TaxResult:
+    def calculate_invoice_tax(self, subtotal: Decimal, gst_registered: bool, gst_rate: Decimal, tax_inclusive: bool = False) -> TaxResult:
         if not gst_registered:
             return TaxResult(
                 tax_rate=Decimal("0"),
                 tax_amount=Decimal("0"),
                 description="Not GST registered",
+            )
+
+        if tax_inclusive:
+            tax_amount = (subtotal * gst_rate / (1 + gst_rate)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            pre_tax_amount = subtotal - tax_amount
+            return TaxResult(
+                tax_rate=gst_rate,
+                tax_amount=tax_amount,
+                description=f"GST {gst_rate * 100}% (inclusive)",
+                is_inclusive=True,
+                pre_tax_amount=pre_tax_amount,
             )
 
         tax_amount = (subtotal * gst_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)

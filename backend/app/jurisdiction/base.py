@@ -19,6 +19,8 @@ class TaxResult:
     tax_rate: Decimal
     tax_amount: Decimal
     description: str
+    is_inclusive: bool = False
+    pre_tax_amount: Optional[Decimal] = None
 
 
 class JurisdictionBase(ABC):
@@ -28,7 +30,7 @@ class JurisdictionBase(ABC):
         ...
 
     @abstractmethod
-    def calculate_invoice_tax(self, subtotal: Decimal, gst_registered: bool, gst_rate: Decimal) -> TaxResult:
+    def calculate_invoice_tax(self, subtotal: Decimal, gst_registered: bool, gst_rate: Decimal, tax_inclusive: bool = False) -> TaxResult:
         """Calculate tax on invoice subtotal."""
         ...
 

@@ -76,6 +76,7 @@ class InvoiceCreate(BaseModel):
     description: Optional[str] = None
     payment_method: Optional[str] = None
     wallet_address: Optional[str] = None
+    tax_inclusive: bool = False
 
 
 class InvoiceUpdate(BaseModel):
@@ -83,6 +84,7 @@ class InvoiceUpdate(BaseModel):
     currency: Optional[str] = None
     payment_method: Optional[str] = None
     wallet_address: Optional[str] = None
+    tax_inclusive: Optional[bool] = None
 
 
 class InvoiceResponse(BaseModel):
@@ -96,6 +98,7 @@ class InvoiceResponse(BaseModel):
     tax_rate: Optional[Decimal]
     tax_amount: Decimal
     total_amount: Decimal
+    tax_inclusive: bool
     status: str
     description: Optional[str]
     payment_method: Optional[str]

@@ -39,8 +39,12 @@ class BankTransaction(Base):
     imported_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
 
     currency_rel = relationship("Currency", foreign_keys=[currency])
     matched_payment = relationship("Payment", foreign_keys=[matched_payment_id])
     statement_file = relationship("File", foreign_keys=[statement_file_id])
     importer = relationship("User", foreign_keys=[imported_by])
+    account = relationship("Account", foreign_keys=[account_id])

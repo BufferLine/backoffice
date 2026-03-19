@@ -137,6 +137,18 @@
   <div class="totals-wrapper">
     <table class="totals-table">
       <tbody>
+        {% if invoice.tax_inclusive %}
+        <tr>
+          <td class="label">Subtotal (incl. GST{% if invoice.tax_rate %} {{ invoice.tax_rate|pct }}%{% endif %})</td>
+          <td class="amount">{{ invoice.currency }} {{ invoice.subtotal_amount|money }}</td>
+        </tr>
+        {% if invoice.tax_amount %}
+        <tr>
+          <td class="label">of which GST</td>
+          <td class="amount">{{ invoice.currency }} {{ invoice.tax_amount|money }}</td>
+        </tr>
+        {% endif %}
+        {% else %}
         <tr>
           <td class="label">Subtotal</td>
           <td class="amount">{{ invoice.currency }} {{ invoice.subtotal_amount|money }}</td>
@@ -148,6 +160,7 @@
           </td>
           <td class="amount">{{ invoice.currency }} {{ invoice.tax_amount|money }}</td>
         </tr>
+        {% endif %}
         {% endif %}
         <tr class="total-row">
           <td class="label">Total</td>
