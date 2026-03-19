@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Invoice {{ invoice.invoice_number }}</title>
+  <style>
+    /* Inline base styles for WeasyPrint compatibility */
+    @page { size: A4; margin: 20mm 18mm 20mm 18mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 10pt; line-height: 1.5; color: #1a1a2e; background: #fff;
+    }
+    .header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 32pt; padding-bottom: 16pt; border-bottom: 2pt solid #1a1a2e;
+    }
+    .company-info h1 { font-size: 16pt; font-weight: 700; margin-bottom: 4pt; }
+    .company-info p { font-size: 9pt; color: #555; line-height: 1.7; }
+    .doc-title { text-align: right; }
+    .doc-title h2 {
+      font-size: 24pt; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: #1a1a2e;
+    }
+    .doc-title .doc-number { font-size: 10pt; color: #555; margin-top: 4pt; }
+    .meta-grid { display: flex; gap: 40pt; margin-bottom: 28pt; }
+    .meta-block h3 {
+      font-size: 8pt; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #888; margin-bottom: 4pt;
+    }
+    .meta-block p { font-size: 9.5pt; line-height: 1.6; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20pt; font-size: 9.5pt; }
+    thead tr { background-color: #1a1a2e; color: #fff; }
+    thead th {
+      padding: 7pt 10pt; text-align: left; font-weight: 600;
+      font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    thead th.right { text-align: right; }
+    tbody tr { border-bottom: 0.5pt solid #e0e0e0; }
+    tbody td { padding: 7pt 10pt; vertical-align: top; }
+    tbody td.right { text-align: right; font-variant-numeric: tabular-nums; }
+    tbody tr:nth-child(even) { background-color: #f9f9f9; }
+    .totals-wrapper { display: flex; justify-content: flex-end; margin-bottom: 28pt; }
+    .totals-table { width: 260pt; border-collapse: collapse; }
+    .totals-table td { padding: 4pt 10pt; font-size: 9.5pt; }
+    .totals-table .label { color: #555; }
+    .totals-table .amount { text-align: right; font-variant-numeric: tabular-nums; }
+    .totals-table .total-row td {
+      padding-top: 8pt; border-top: 1.5pt solid #1a1a2e;
+      font-weight: 700; font-size: 11pt;
+    }
+    .section { margin-bottom: 24pt; }
+    .section h3 {
+      font-size: 8pt; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #888; margin-bottom: 8pt;
+      padding-bottom: 4pt; border-bottom: 0.5pt solid #e0e0e0;
+    }
+    .payment-info p { font-size: 9pt; line-height: 1.8; color: #333; }
+    .payment-info strong { color: #1a1a2e; }
+    .footer {
+      margin-top: 40pt; padding-top: 10pt; border-top: 0.5pt solid #e0e0e0;
+      text-align: center; font-size: 8pt; color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────── -->
+  <div class="header">
+    <div class="company-info">
+      {% if company.logo_url %}
+        <img src="{{ company.logo_url }}" alt="{{ company.name }}" style="height:36pt; margin-bottom:8pt; display:block;" />
+      {% endif %}
+      <h1>{{ company.name }}</h1>
+      <p>
+        {% if company.address %}{{ company.address }}<br/>{% endif %}
+        {% if company.uen %}UEN: {{ company.uen }}<br/>{% endif %}
+        {% if company.email %}{{ company.email }}{% endif %}
+      </p>
+    </div>
+    <div class="doc-title">
+      <h2>Invoice</h2>
+      <div class="doc-number">{{ invoice.invoice_number }}</div>
+    </div>
+  </div>
+
+  <!-- ── Meta ────────────────────────────────────────────── -->
+  <div class="meta-grid">
+    <div class="meta-block">
+      <h3>Bill To</h3>
+      <p>
+        <strong>{{ client.name }}</strong><br/>
+        {% if client.address %}{{ client.address }}<br/>{% endif %}
+        {% if client.uen %}UEN: {{ client.uen }}<br/>{% endif %}
+        {% if client.email %}{{ client.email }}{% endif %}
+      </p>
+    </div>
+    <div class="meta-block">
+      <h3>Invoice Date</h3>
+      <p>{{ invoice.issue_date }}</p>
+    </div>
+    <div class="meta-block">
+      <h3>Due Date</h3>
+      <p>{{ invoice.due_date }}</p>
+    </div>
+    {% if invoice.payment_terms %}
+    <div class="meta-block">
+      <h3>Payment Terms</h3>
+      <p>{{ invoice.payment_terms }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Line Items ───────────────────────────────────────── -->
+  <table>
+    <thead>
+      <tr>
+        <th style="width:50%">Description</th>
+        <th class="right" style="width:12%">Qty</th>
+        <th class="right" style="width:18%">Unit Price</th>
+        <th class="right" style="width:20%">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in line_items %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td class="right">{{ item.quantity }}</td>
+        <td class="right">{{ invoice.currency }} {{ "%.2f"|format(item.unit_price) }}</td>
+        <td class="right">{{ invoice.currency }} {{ "%.2f"|format(item.amount) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- ── Totals ───────────────────────────────────────────── -->
+  <div class="totals-wrapper">
+    <table class="totals-table">
+      <tbody>
+        <tr>
+          <td class="label">Subtotal</td>
+          <td class="amount">{{ invoice.currency }} {{ "%.2f"|format(invoice.subtotal_amount) }}</td>
+        </tr>
+        {% if invoice.tax_amount %}
+        <tr>
+          <td class="label">
+            {% if invoice.tax_rate %}GST ({{ (invoice.tax_rate * 100)|round(1) }}%){% else %}Tax{% endif %}
+          </td>
+          <td class="amount">{{ invoice.currency }} {{ "%.2f"|format(invoice.tax_amount) }}</td>
+        </tr>
+        {% endif %}
+        <tr class="total-row">
+          <td class="label">Total</td>
+          <td class="amount">{{ invoice.currency }} {{ "%.2f"|format(invoice.total_amount) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Payment Details ──────────────────────────────────── -->
+  <div class="section">
+    <h3>Payment Details</h3>
+    <div class="payment-info">
+      {% if invoice.payment_method == "bank_transfer" and payment_details %}
+        <p>
+          <strong>Bank:</strong> {{ payment_details.bank_name }}<br/>
+          <strong>Account Name:</strong> {{ payment_details.account_name }}<br/>
+          <strong>Account Number:</strong> {{ payment_details.account_number }}<br/>
+          {% if payment_details.swift %}<strong>SWIFT:</strong> {{ payment_details.swift }}<br/>{% endif %}
+          {% if payment_details.reference %}<strong>Reference:</strong> {{ payment_details.reference }}{% endif %}
+        </p>
+      {% elif invoice.payment_method == "crypto" and invoice.wallet_address %}
+        <p>
+          <strong>Wallet Address:</strong> {{ invoice.wallet_address }}<br/>
+          <strong>Currency:</strong> {{ invoice.currency }}
+        </p>
+      {% else %}
+        <p>Please contact us for payment instructions.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if invoice.description %}
+  <!-- ── Notes ────────────────────────────────────────────── -->
+  <div class="section">
+    <h3>Notes</h3>
+    <p style="font-size:9pt; color:#555;">{{ invoice.description }}</p>
+  </div>
+  {% endif %}
+
+  <!-- ── Footer ───────────────────────────────────────────── -->
+  <div class="footer">
+    {{ company.name }}{% if company.uen %} &middot; UEN {{ company.uen }}{% endif %}
+    {% if company.address %} &middot; {{ company.address }}{% endif %}
+  </div>
+
+</body>
+</html>

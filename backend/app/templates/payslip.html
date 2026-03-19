@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Payslip — {{ employee.name }} — {{ payroll.month }}</title>
+  <style>
+    /* Inline base styles for WeasyPrint compatibility */
+    @page { size: A4; margin: 20mm 18mm 20mm 18mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 10pt; line-height: 1.5; color: #1a1a2e; background: #fff;
+    }
+    .header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 32pt; padding-bottom: 16pt; border-bottom: 2pt solid #1a1a2e;
+    }
+    .company-info h1 { font-size: 16pt; font-weight: 700; margin-bottom: 4pt; }
+    .company-info p { font-size: 9pt; color: #555; line-height: 1.7; }
+    .doc-title { text-align: right; }
+    .doc-title h2 {
+      font-size: 24pt; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: #1a1a2e;
+    }
+    .doc-title .doc-sub { font-size: 10pt; color: #555; margin-top: 4pt; }
+    .meta-grid { display: flex; gap: 40pt; margin-bottom: 28pt; }
+    .meta-block h3 {
+      font-size: 8pt; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #888; margin-bottom: 4pt;
+    }
+    .meta-block p { font-size: 9.5pt; line-height: 1.6; }
+    .section { margin-bottom: 20pt; }
+    .section h3 {
+      font-size: 8pt; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #888; margin-bottom: 8pt;
+      padding-bottom: 4pt; border-bottom: 0.5pt solid #e0e0e0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+    tbody td { padding: 5pt 8pt; }
+    tbody tr { border-bottom: 0.5pt solid #f0f0f0; }
+    tbody td.right { text-align: right; font-variant-numeric: tabular-nums; }
+    tbody td.label { color: #555; }
+    tbody td.sublabel { color: #888; font-size: 8.5pt; padding-left: 20pt; }
+    tfoot td {
+      padding: 6pt 8pt; font-weight: 600; border-top: 1pt solid #ccc;
+    }
+    tfoot td.right { text-align: right; font-variant-numeric: tabular-nums; }
+    .net-pay-box {
+      background-color: #1a1a2e; color: #fff;
+      padding: 12pt 16pt; margin-bottom: 24pt;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .net-pay-box .net-label {
+      font-size: 10pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .net-pay-box .net-amount { font-size: 16pt; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .payment-info p { font-size: 9pt; line-height: 1.8; color: #333; }
+    .payment-info strong { color: #1a1a2e; }
+    .footer {
+      margin-top: 40pt; padding-top: 10pt; border-top: 0.5pt solid #e0e0e0;
+      text-align: center; font-size: 8pt; color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────── -->
+  <div class="header">
+    <div class="company-info">
+      {% if company.logo_url %}
+        <img src="{{ company.logo_url }}" alt="{{ company.name }}" style="height:36pt; margin-bottom:8pt; display:block;" />
+      {% endif %}
+      <h1>{{ company.name }}</h1>
+      <p>
+        {% if company.address %}{{ company.address }}<br/>{% endif %}
+        {% if company.uen %}UEN: {{ company.uen }}<br/>{% endif %}
+        {% if company.email %}{{ company.email }}{% endif %}
+      </p>
+    </div>
+    <div class="doc-title">
+      <h2>Payslip</h2>
+      <div class="doc-sub">{{ payroll.month }}</div>
+    </div>
+  </div>
+
+  <!-- ── Employee Info ────────────────────────────────────── -->
+  <div class="meta-grid">
+    <div class="meta-block">
+      <h3>Employee</h3>
+      <p>
+        <strong>{{ employee.name }}</strong><br/>
+        {% if employee.email %}{{ employee.email }}<br/>{% endif %}
+        {% if employee.work_pass_type %}Pass Type: {{ employee.work_pass_type | upper }}<br/>{% endif %}
+        Start Date: {{ employee.start_date }}
+      </p>
+    </div>
+    <div class="meta-block">
+      <h3>Pay Period</h3>
+      <p>
+        {{ payroll.start_date }} to {{ payroll.end_date }}<br/>
+        Days Worked: {{ payroll.days_worked }} / {{ payroll.days_in_month }}
+      </p>
+    </div>
+    <div class="meta-block">
+      <h3>Currency</h3>
+      <p>{{ payroll.currency }}</p>
+    </div>
+  </div>
+
+  <!-- ── Earnings ─────────────────────────────────────────── -->
+  <div class="section">
+    <h3>Earnings</h3>
+    <table>
+      <tbody>
+        <tr>
+          <td class="label">Monthly Base Salary</td>
+          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(payroll.monthly_base_salary) }}</td>
+        </tr>
+        {% if payroll.days_worked < payroll.days_in_month %}
+        <tr>
+          <td class="sublabel">Prorated ({{ payroll.days_worked }}/{{ payroll.days_in_month }} days)</td>
+          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(payroll.prorated_gross_salary) }}</td>
+        </tr>
+        {% endif %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>Gross Salary</td>
+          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(payroll.prorated_gross_salary) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- ── Deductions ───────────────────────────────────────── -->
+  {% if deductions %}
+  <div class="section">
+    <h3>Deductions</h3>
+    <table>
+      <tbody>
+        {% for d in deductions %}
+        <tr>
+          <td class="label">
+            {{ d.description }}
+            {% if d.rate %}
+              <span style="font-size:8pt; color:#888;">({{ (d.rate * 100)|round(2) }}%)</span>
+            {% endif %}
+          </td>
+          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(d.amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>Total Deductions</td>
+          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(payroll.total_deductions) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- ── Net Pay ──────────────────────────────────────────── -->
+  <div class="net-pay-box">
+    <span class="net-label">Net Pay</span>
+    <span class="net-amount">{{ payroll.currency }} {{ "%.2f"|format(payroll.net_salary) }}</span>
+  </div>
+
+  <!-- ── Payment Info ─────────────────────────────────────── -->
+  {% if payment_details %}
+  <div class="section">
+    <h3>Payment Information</h3>
+    <div class="payment-info">
+      <p>
+        {% if payment_details.bank_name %}<strong>Bank:</strong> {{ payment_details.bank_name }}<br/>{% endif %}
+        {% if payment_details.account_name %}<strong>Account Name:</strong> {{ payment_details.account_name }}<br/>{% endif %}
+        {% if payment_details.account_number %}<strong>Account Number:</strong> {{ payment_details.account_number }}<br/>{% endif %}
+        {% if payment_details.reference %}<strong>Reference:</strong> {{ payment_details.reference }}{% endif %}
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Footer ───────────────────────────────────────────── -->
+  <div class="footer">
+    {{ company.name }}{% if company.uen %} &middot; UEN {{ company.uen }}{% endif %}
+    &middot; This payslip is computer-generated and does not require a signature.
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,218 @@
+/* base.css — shared print-friendly styles for invoice and payslip PDFs */
+
+@page {
+    size: A4;
+    margin: 20mm 18mm 20mm 18mm;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 10pt;
+    line-height: 1.5;
+    color: #1a1a2e;
+    background: #ffffff;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 32pt;
+    padding-bottom: 16pt;
+    border-bottom: 2pt solid #1a1a2e;
+}
+
+.company-info h1 {
+    font-size: 16pt;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 4pt;
+}
+
+.company-info p {
+    font-size: 9pt;
+    color: #555;
+    line-height: 1.6;
+}
+
+.doc-title {
+    text-align: right;
+}
+
+.doc-title h2 {
+    font-size: 22pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #1a1a2e;
+    text-transform: uppercase;
+}
+
+.doc-title .doc-number {
+    font-size: 10pt;
+    color: #555;
+    margin-top: 4pt;
+}
+
+/* ── Meta grid (dates, billing to) ───────────────────────── */
+.meta-grid {
+    display: flex;
+    gap: 40pt;
+    margin-bottom: 28pt;
+}
+
+.meta-block h3 {
+    font-size: 8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #888;
+    margin-bottom: 4pt;
+}
+
+.meta-block p {
+    font-size: 9.5pt;
+    line-height: 1.6;
+    color: #1a1a2e;
+}
+
+/* ── Table ───────────────────────────────────────────────── */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20pt;
+    font-size: 9.5pt;
+}
+
+thead tr {
+    background-color: #1a1a2e;
+    color: #ffffff;
+}
+
+thead th {
+    padding: 7pt 10pt;
+    text-align: left;
+    font-weight: 600;
+    font-size: 8.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+thead th.right,
+tbody td.right,
+tfoot td.right {
+    text-align: right;
+}
+
+tbody tr {
+    border-bottom: 0.5pt solid #e0e0e0;
+}
+
+tbody tr:last-child {
+    border-bottom: none;
+}
+
+tbody td {
+    padding: 7pt 10pt;
+    vertical-align: top;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+/* ── Totals ──────────────────────────────────────────────── */
+.totals-table {
+    width: 260pt;
+    margin-left: auto;
+    margin-bottom: 28pt;
+}
+
+.totals-table td {
+    padding: 4pt 10pt;
+    font-size: 9.5pt;
+}
+
+.totals-table .label {
+    color: #555;
+}
+
+.totals-table .amount {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.totals-table .total-row td {
+    padding-top: 8pt;
+    border-top: 1.5pt solid #1a1a2e;
+    font-weight: 700;
+    font-size: 11pt;
+}
+
+/* ── Section blocks ──────────────────────────────────────── */
+.section {
+    margin-bottom: 24pt;
+}
+
+.section h3 {
+    font-size: 8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #888;
+    margin-bottom: 8pt;
+    padding-bottom: 4pt;
+    border-bottom: 0.5pt solid #e0e0e0;
+}
+
+/* ── Payment info ────────────────────────────────────────── */
+.payment-info p {
+    font-size: 9pt;
+    line-height: 1.8;
+    color: #333;
+}
+
+.payment-info strong {
+    color: #1a1a2e;
+}
+
+/* ── Footer ──────────────────────────────────────────────── */
+.footer {
+    margin-top: 40pt;
+    padding-top: 10pt;
+    border-top: 0.5pt solid #e0e0e0;
+    text-align: center;
+    font-size: 8pt;
+    color: #aaa;
+}
+
+/* ── Net pay highlight ───────────────────────────────────── */
+.net-pay-box {
+    background-color: #1a1a2e;
+    color: #ffffff;
+    padding: 12pt 16pt;
+    border-radius: 3pt;
+    margin-bottom: 24pt;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.net-pay-box .net-label {
+    font-size: 10pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.net-pay-box .net-amount {
+    font-size: 16pt;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
