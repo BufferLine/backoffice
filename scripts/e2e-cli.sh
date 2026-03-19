@@ -48,20 +48,16 @@ fi
 pass "Server health"
 
 # -------------------------------------------------------------------------
-# 1. Onboarding — init via API (acct init requires interactive prompts),
-#    complete via API (simulates browser), then CLI login.
+# 1. Onboarding — acct init (non-interactive), then complete via API (simulates browser)
 # -------------------------------------------------------------------------
 echo ""
 echo "[1. Onboarding]"
 
-INIT_RESP=$(curl -sf -X POST "$API_URL/api/setup/init" \
-  -H "Content-Type: application/json" \
-  -d '{"company_name":"Bufferline Pte Ltd","jurisdiction":"SG","uen":"202412345A"}' 2>&1) || INIT_RESP=""
+INIT_OUTPUT=$(acct_run init --company-name "Bufferline Pte Ltd" --jurisdiction SG --uen 202412345A --api-url "$API_URL")
 
-if echo "$INIT_RESP" | grep -q "setup_url"; then
-  pass "System init (via API — acct init requires interactive prompts)"
-  TOKEN=$(echo "$INIT_RESP" | python3 -c \
-    "import sys,json; print(json.load(sys.stdin)['setup_url'].split('token=')[1])" 2>/dev/null || echo "")
+if echo "$INIT_OUTPUT" | grep -qi "initialized\|setup"; then
+  pass "acct init"
+  TOKEN=$(echo "$INIT_OUTPUT" | python3 -c "import sys,re; m=re.search(r'token=([^\s&]+)', sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null || echo "")
 
   if [ -z "$TOKEN" ]; then
     fail "Extract setup token" "could not parse token from: $INIT_RESP"
@@ -73,7 +69,7 @@ if echo "$INIT_RESP" | grep -q "setup_url"; then
     -d "{\"token\":\"$TOKEN\",\"email\":\"admin@bufferline.com\",\"password\":\"Admin123!\",\"name\":\"Admin User\"}" 2>&1) || COMPLETE_RESP=""
 
   if echo "$COMPLETE_RESP" | grep -q "access_token"; then
-    pass "Admin account created (via API — simulates browser setup)"
+    pass "Admin account created (via browser — simulated with curl)"
   else
     fail "Admin account created" "$COMPLETE_RESP"
     echo "Cannot continue without admin account. Exiting."

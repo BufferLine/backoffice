@@ -31,12 +31,19 @@ app.add_typer(commitment.app, name="commitment")
 
 @app.command()
 def init(
-    company_name: str = typer.Option(..., prompt="Company name"),
-    jurisdiction: str = typer.Option("SG", prompt="Jurisdiction (SG, KR, etc.)"),
-    uen: str = typer.Option("", prompt="UEN (optional, press enter to skip)"),
+    company_name: str = typer.Option(None, "--company-name", help="Company legal name"),
+    jurisdiction: str = typer.Option(None, "--jurisdiction", help="Jurisdiction code (SG, KR, etc.)"),
+    uen: str = typer.Option(None, "--uen", help="Company UEN (optional)"),
     api_url: str = typer.Option("http://localhost:8000", "--api-url"),
 ) -> None:
-    """Initialize the backoffice system."""
+    """Initialize the backoffice system. Options are prompted interactively if not provided."""
+    if not company_name:
+        company_name = typer.prompt("Company name")
+    if not jurisdiction:
+        jurisdiction = typer.prompt("Jurisdiction (SG, KR, etc.)", default="SG")
+    if uen is None:
+        uen = typer.prompt("UEN (optional, press enter to skip)", default="")
+
     save_credentials("", api_url)
     resp = api_post(
         "/api/setup/init",
