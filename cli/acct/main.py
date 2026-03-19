@@ -36,6 +36,9 @@ def init(
     company_name: str = typer.Option(None, "--company-name", help="Company legal name"),
     jurisdiction: str = typer.Option(None, "--jurisdiction", help="Jurisdiction code (SG, KR, etc.)"),
     uen: str = typer.Option(None, "--uen", help="Company UEN (optional)"),
+    admin_email: str = typer.Option(None, "--admin-email", help="Admin email (skips browser setup)"),
+    admin_password: str = typer.Option(None, "--admin-password", help="Admin password"),
+    admin_name: str = typer.Option(None, "--admin-name", help="Admin display name"),
     api_url: str = typer.Option("http://localhost:8000", "--api-url"),
 ) -> None:
     """Initialize the backoffice system. Options are prompted interactively if not provided."""
@@ -56,10 +59,33 @@ def init(
         },
     )
     setup_url = resp["setup_url"]
+    token = setup_url.split("token=")[-1]
     print_success("System initialized!")
-    typer.echo(f"\nOpen this link in your browser to create your admin account:\n")
-    typer.echo(f"  {setup_url}\n")
-    typer.echo("This link expires in 1 hour and can only be used once.")
+
+    if admin_email:
+        # Direct admin creation (skip browser)
+        if not admin_password:
+            admin_password = typer.prompt("Admin password", hide_input=True)
+        if not admin_name:
+            admin_name = typer.prompt("Admin name", default="Admin")
+
+        complete_resp = api_post(
+            "/api/setup/complete",
+            json_data={
+                "token": token,
+                "email": admin_email,
+                "password": admin_password,
+                "name": admin_name,
+            },
+        )
+        # Auto-login with the returned token
+        access_token = complete_resp.get("access_token", "")
+        save_credentials(access_token, api_url)
+        print_success(f"Admin account created and logged in as {admin_email}")
+    else:
+        typer.echo(f"\nOpen this link in your browser to create your admin account:\n")
+        typer.echo(f"  {setup_url}\n")
+        typer.echo("This link expires in 1 hour and can only be used once.")
 
 
 @app.command()
