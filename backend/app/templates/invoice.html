@@ -69,9 +69,9 @@
   <div class="header">
     <div class="company-info">
       {% if logo_uri %}
-        <img src="{{ logo_uri }}" alt="{{ company.name }}" style="max-height:60px; margin-bottom:8pt; display:block;" />
+        <img src="{{ logo_uri }}" alt="{{ company.legal_name }}" style="max-height:60px; margin-bottom:8pt; display:block;" />
       {% endif %}
-      <h1>{{ company.name }}</h1>
+      <h1>{{ company.legal_name }}</h1>
       <p>
         {% if company.address %}{{ company.address }}<br/>{% endif %}
         {% if company.uen %}UEN: {{ company.uen }}<br/>{% endif %}
@@ -211,7 +211,7 @@
 
   <!-- ── Footer ───────────────────────────────────────────── -->
   <div class="footer">
-    {{ company.name }}{% if company.uen %} &middot; UEN {{ company.uen }}{% endif %}
+    {{ company.legal_name }}{% if company.uen %} &middot; UEN {{ company.uen }}{% endif %}
     {% if company.address %} &middot; {{ company.address }}{% endif %}
   </div>
 
