@@ -2,7 +2,7 @@ from typing import Optional
 
 import typer
 
-from acct.api_client import api_download, api_get, api_post
+from acct.api_client import api_download, api_get, api_patch, api_post, get_client
 from acct.formatters import print_json, print_success, print_table
 
 app = typer.Typer(help="Payroll run commands")
@@ -104,3 +104,51 @@ def download(
     """Download payslip PDF."""
     filepath = api_download(f"/api/payroll/runs/{payroll_id}/pdf", output)
     print_success(f"Downloaded: {filepath}")
+
+
+@app.command()
+def delete(
+    payroll_id: str = typer.Argument(..., help="Payroll run ID"),
+    reason: Optional[str] = typer.Option(None, "--reason", help="Reason for deletion (required for finalized runs)"),
+) -> None:
+    """Delete a payroll run."""
+    params: dict = {}
+    if reason:
+        params["reason"] = reason
+    with get_client() as client:
+        resp = client.delete(f"/api/payroll/runs/{payroll_id}", params=params)
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json().get("detail", resp.text)
+            except Exception:
+                detail = resp.text
+            typer.echo(f"Error {resp.status_code}: {detail}", err=True)
+            raise typer.Exit(1)
+    print_success(f"Payroll run {payroll_id} deleted")
+
+
+@app.command()
+def edit(
+    payroll_id: str = typer.Argument(..., help="Payroll run ID"),
+    start_date: Optional[str] = typer.Option(None, "--start-date", help="New start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = typer.Option(None, "--end-date", help="New end date (YYYY-MM-DD)"),
+) -> None:
+    """Edit a draft payroll run (recalculates proration)."""
+    payload: dict = {}
+    if start_date is not None:
+        payload["start_date"] = start_date
+    if end_date is not None:
+        payload["end_date"] = end_date
+    data = api_patch(f"/api/payroll/runs/{payroll_id}", json_data=payload)
+    print_success(f"Payroll run {payroll_id} updated")
+    print_json(data)
+
+
+@app.command()
+def regenerate_pdf(
+    payroll_id: str = typer.Argument(..., help="Payroll run ID"),
+) -> None:
+    """Regenerate payslip PDF with current company branding."""
+    data = api_post(f"/api/payroll/runs/{payroll_id}/regenerate-pdf")
+    print_success(f"Payslip PDF regenerated for payroll run {payroll_id}")
+    print_json(data)

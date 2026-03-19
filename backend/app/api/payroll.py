@@ -20,6 +20,7 @@ from app.schemas.payroll import (
     PayrollMarkPaidRequest,
     PayrollRunCreate,
     PayrollRunResponse,
+    PayrollRunUpdate,
 )
 from app.services import payroll as payroll_service
 from app.services.audit import AuditService
@@ -257,6 +258,77 @@ async def download_payslip_pdf(
             "Content-Length": str(len(content)),
         },
     )
+
+
+@router.delete("/runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_payroll_run(
+    run_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    reason: Optional[str] = Query(None, description="Reason for deletion (required for finalized runs)"),
+) -> None:
+    run = await payroll_service.get_payroll_run(db, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payroll run not found")
+
+    if run.status == "paid":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete a paid payroll run. Unlink payment first.",
+        )
+
+    try:
+        await payroll_service.delete_payroll_run(db, run_id, current_user.id, reason=reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    await db.commit()
+
+
+@router.patch("/runs/{run_id}", response_model=PayrollRunResponse)
+async def update_payroll_run(
+    run_id: uuid.UUID,
+    body: PayrollRunUpdate,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PayrollRunResponse:
+    try:
+        run = await payroll_service.update_payroll_run(
+            db,
+            run_id,
+            user_id=current_user.id,
+            start_date=body.start_date,
+            end_date=body.end_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payroll run not found")
+
+    await db.commit()
+    run = await payroll_service.get_payroll_run(db, run_id)
+    return PayrollRunResponse.model_validate(run)
+
+
+@router.post("/runs/{run_id}/regenerate-pdf", response_model=PayrollRunResponse)
+async def regenerate_payslip_pdf(
+    run_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> PayrollRunResponse:
+    try:
+        run = await payroll_service.regenerate_payslip(db, run_id, current_user.id, file_storage)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payroll run not found")
+
+    await db.commit()
+    run = await payroll_service.get_payroll_run(db, run_id)
+    return PayrollRunResponse.model_validate(run)
 
 
 @router.post("/runs/{run_id}/attach-file", response_model=PayrollRunResponse)

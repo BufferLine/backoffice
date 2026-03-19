@@ -389,6 +389,271 @@ async def mark_paid(
     return run
 
 
+async def delete_payroll_run(
+    db: AsyncSession,
+    run_id: uuid.UUID,
+    user_id: uuid.UUID,
+    reason: Optional[str] = None,
+) -> None:
+    run = await _load_run_with_deductions(db, run_id)
+    if run is None:
+        return None
+
+    if run.status == "paid":
+        raise ValueError("Cannot delete paid payroll run")
+
+    if run.status == "finalized":
+        if not reason:
+            raise ValueError("Reason is required when deleting a finalized payroll run")
+        await track_status_change(
+            db, "payroll_run", run_id, run.status, "deleted", changed_by=user_id, reason=reason
+        )
+
+    audit = AuditService(db)
+    await audit.log(
+        action="payroll.delete",
+        entity_type="payroll_run",
+        entity_id=run_id,
+        actor_id=user_id,
+        input_data={"reason": reason, "status_at_deletion": run.status},
+    )
+
+    await db.delete(run)
+    await db.flush()
+
+
+async def update_payroll_run(
+    db: AsyncSession,
+    run_id: uuid.UUID,
+    user_id: uuid.UUID,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+) -> PayrollRun:
+    run = await _load_run_with_deductions(db, run_id)
+    if run is None:
+        return None
+
+    if run.status != "draft":
+        raise ValueError("Can only edit draft payroll runs")
+
+    # Apply date changes
+    new_start = start_date if start_date is not None else run.start_date
+    new_end = end_date if end_date is not None else run.end_date
+
+    # Snapshot old values for changelog
+    old_start = run.start_date
+    old_end = run.end_date
+
+    run.start_date = new_start
+    run.end_date = new_end
+
+    # Recalculate days_worked, prorated_gross, deductions, net
+    days_worked = (new_end - new_start).days + 1
+    days_worked = max(0, days_worked)
+    run.days_worked = days_worked
+
+    monthly_base_salary = Decimal(str(run.monthly_base_salary))
+
+    company_settings = await _get_company_settings(db)
+    jurisdiction_code = company_settings.jurisdiction or "SG"
+    jurisdiction = get_jurisdiction(jurisdiction_code)
+
+    prorated_gross = jurisdiction.prorate_salary(monthly_base_salary, days_worked, run.days_in_month)
+    run.prorated_gross_salary = prorated_gross
+
+    work_pass_type = run.employee.work_pass_type or "EP"
+    raw_deductions = jurisdiction.calculate_deductions(prorated_gross, work_pass_type)
+
+    total_deductions = Decimal("0")
+    for d in raw_deductions:
+        is_employer_cost = (d.metadata or {}).get("employer_cost", False)
+        if not is_employer_cost:
+            total_deductions += d.amount
+
+    run.total_deductions = total_deductions
+    run.net_salary = prorated_gross - total_deductions
+
+    # Replace deduction records
+    for deduction in list(run.deductions):
+        await db.delete(deduction)
+    await db.flush()
+
+    for idx, d in enumerate(raw_deductions):
+        deduction = PayrollDeduction(
+            payroll_run_id=run.id,
+            deduction_type=d.deduction_type,
+            description=d.description,
+            amount=d.amount,
+            rate=d.rate,
+            cap_amount=d.cap_amount,
+            metadata_json=d.metadata,
+            sort_order=idx,
+        )
+        db.add(deduction)
+
+    await db.flush()
+
+    # Track changes
+    changes: dict = {}
+    if old_start != new_start:
+        changes["start_date"] = new_start
+    if old_end != new_end:
+        changes["end_date"] = new_end
+
+    if changes:
+        from app.services.changelog import track_changes
+        old_values = {"start_date": old_start, "end_date": old_end}
+        await track_changes(db, "payroll_run", run_id, old_values, changes, changed_by=user_id)
+
+    audit = AuditService(db)
+    await audit.log(
+        action="payroll.update",
+        entity_type="payroll_run",
+        entity_id=run_id,
+        actor_id=user_id,
+        input_data={"start_date": str(new_start), "end_date": str(new_end)},
+        output_data={
+            "days_worked": days_worked,
+            "prorated_gross_salary": float(prorated_gross),
+            "total_deductions": float(total_deductions),
+            "net_salary": float(prorated_gross - total_deductions),
+        },
+    )
+
+    return run
+
+
+async def regenerate_payslip(
+    db: AsyncSession,
+    run_id: uuid.UUID,
+    user_id: uuid.UUID,
+    file_storage: FileStorageService,
+) -> PayrollRun:
+    run = await _load_run_with_deductions(db, run_id)
+    if run is None:
+        return None
+
+    if run.status != "finalized":
+        raise ValueError("Can only regenerate payslip PDF for finalized payroll runs")
+
+    company_settings = await _get_company_settings(db)
+
+    deductions_data = [
+        {
+            "type": d.deduction_type,
+            "description": d.description,
+            "amount": float(d.amount),
+            "rate": float(d.rate) if d.rate is not None else None,
+            "metadata": d.metadata_json or {},
+        }
+        for d in run.deductions
+    ]
+
+    pdf_data = {
+        "company": {
+            "legal_name": company_settings.legal_name or "",
+            "uen": company_settings.uen or "",
+            "address": company_settings.address or "",
+        },
+        "employee": {
+            "name": run.employee.name,
+            "email": run.employee.email or "",
+            "work_pass_type": run.employee.work_pass_type or "",
+        },
+        "payroll": {
+            "month": run.month.strftime("%B %Y"),
+            "start_date": run.start_date.isoformat(),
+            "end_date": run.end_date.isoformat(),
+            "days_in_month": run.days_in_month,
+            "days_worked": run.days_worked,
+            "monthly_base_salary": float(run.monthly_base_salary),
+            "currency": run.currency,
+            "prorated_gross_salary": float(run.prorated_gross_salary),
+            "total_deductions": float(run.total_deductions),
+            "net_salary": float(run.net_salary),
+        },
+        "deductions": deductions_data,
+    }
+
+    # Load stamp
+    stamp_bytes = None
+    stamp_mime = "image/png"
+    if company_settings and company_settings.stamp_file_id:
+        from app.models.file import File as FileModel
+        stamp_file_result = await db.execute(
+            select(FileModel).where(FileModel.id == company_settings.stamp_file_id)
+        )
+        stamp_file = stamp_file_result.scalar_one_or_none()
+        if stamp_file:
+            try:
+                stamp_bytes = file_storage.download(stamp_file.storage_key)
+                stamp_mime = stamp_file.mime_type or "image/png"
+            except Exception:
+                pass
+
+    # Load logo
+    logo_bytes = None
+    logo_mime = "image/png"
+    if company_settings and company_settings.logo_file_id:
+        from app.models.file import File as FileModel
+        logo_file_result = await db.execute(
+            select(FileModel).where(FileModel.id == company_settings.logo_file_id)
+        )
+        logo_file = logo_file_result.scalar_one_or_none()
+        if logo_file:
+            try:
+                logo_bytes = file_storage.download(logo_file.storage_key)
+                logo_mime = logo_file.mime_type or "image/png"
+            except Exception:
+                pass
+
+    theme = {
+        "primary_color": company_settings.primary_color or "#1a56db",
+        "accent_color": company_settings.accent_color or "#374151",
+        "font_family": company_settings.font_family or "Helvetica, Arial, sans-serif",
+    }
+
+    pdf_bytes = render_payslip_pdf(
+        pdf_data,
+        stamp_bytes=stamp_bytes,
+        stamp_mime=stamp_mime,
+        logo_bytes=logo_bytes,
+        logo_mime=logo_mime,
+        theme=theme,
+    )
+
+    filename = f"payslip_{run.employee.name.replace(' ', '_')}_{run.month.strftime('%Y-%m')}.pdf"
+    storage_key, sha256, size = file_storage.upload(
+        io.BytesIO(pdf_bytes), filename, "application/pdf"
+    )
+
+    file_record = File(
+        storage_key=storage_key,
+        original_filename=filename,
+        mime_type="application/pdf",
+        size_bytes=size,
+        checksum_sha256=sha256,
+        uploaded_by=user_id,
+        linked_entity_type="payroll_run",
+        linked_entity_id=run_id,
+    )
+    db.add(file_record)
+    await db.flush()
+
+    run.payslip_file_id = file_record.id
+    await db.flush()
+
+    audit = AuditService(db)
+    await audit.log(
+        action="payroll.regenerate_pdf",
+        entity_type="payroll_run",
+        entity_id=run_id,
+        actor_id=user_id,
+        output_data={"payslip_file_id": str(file_record.id)},
+    )
+    return run
+
+
 async def get_payroll_run(db: AsyncSession, run_id: uuid.UUID) -> Optional[PayrollRun]:
     return await _load_run_with_deductions(db, run_id)
 

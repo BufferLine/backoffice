@@ -134,5 +134,10 @@ class PayrollListResponse(BaseModel):
     total: int
 
 
+class PayrollRunUpdate(BaseModel):
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+
 class PayrollMarkPaidRequest(BaseModel):
     payment_id: UUID

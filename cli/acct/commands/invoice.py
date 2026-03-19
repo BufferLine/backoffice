@@ -152,3 +152,13 @@ def download(
     """Download invoice PDF."""
     filepath = api_download(f"/api/invoices/{invoice_id}/pdf", output)
     print_success(f"Downloaded: {filepath}")
+
+
+@app.command()
+def regenerate_pdf(
+    invoice_id: str = typer.Argument(..., help="Invoice ID"),
+) -> None:
+    """Regenerate invoice PDF with current company branding."""
+    data = api_post(f"/api/invoices/{invoice_id}/regenerate-pdf")
+    print_success(f"Invoice PDF regenerated for invoice {invoice_id}")
+    print_json(data)

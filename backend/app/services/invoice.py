@@ -521,6 +521,33 @@ async def mark_paid(
     return invoice
 
 
+async def regenerate_invoice_pdf(
+    db: AsyncSession,
+    invoice: Invoice,
+    user_id: uuid.UUID,
+    file_storage: FileStorageService,
+) -> Invoice:
+    """Regenerate the PDF for an issued invoice with current company branding."""
+    if invoice.status != "issued":
+        raise ValueError("Can only regenerate PDF for issued invoices")
+
+    company = await _get_company_settings(db)
+    new_file_id = await _generate_invoice_pdf(db, invoice, company, file_storage)
+    invoice.issued_pdf_file_id = new_file_id
+    await db.flush()
+
+    audit = AuditService(db)
+    await audit.log(
+        action="regenerate_pdf",
+        entity_type="invoice",
+        entity_id=invoice.id,
+        actor_id=user_id,
+        output_data={"issued_pdf_file_id": str(new_file_id)},
+    )
+
+    return invoice
+
+
 async def cancel_invoice(
     db: AsyncSession,
     invoice: Invoice,

@@ -274,6 +274,34 @@ async def cancel_invoice(
     return InvoiceResponse.model_validate(invoice)
 
 
+@router.post("/{invoice_id}/regenerate-pdf", response_model=InvoiceResponse)
+async def regenerate_invoice_pdf(
+    invoice_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> InvoiceResponse:
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise _not_found()
+
+    try:
+        invoice = await invoice_service.regenerate_invoice_pdf(
+            db=db,
+            invoice=invoice,
+            user_id=current_user.id,
+            file_storage=file_storage,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    await db.commit()
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise _not_found()
+    return InvoiceResponse.model_validate(invoice)
+
+
 @router.post("/{invoice_id}/attach-file", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def attach_file(
     invoice_id: uuid.UUID,
