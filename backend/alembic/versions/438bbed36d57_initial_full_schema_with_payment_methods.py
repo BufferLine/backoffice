@@ -1,8 +1,8 @@
-"""initial full schema
+"""initial full schema with payment methods
 
-Revision ID: 341ccab6928f
+Revision ID: 438bbed36d57
 Revises: 
-Create Date: 2026-03-19 16:46:14.084189
+Create Date: 2026-03-20 01:48:47.504261
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '341ccab6928f'
+revision: str = '438bbed36d57'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -45,6 +45,16 @@ def upgrade() -> None:
     sa.Column('is_system', sa.Boolean(), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
+    )
+    op.create_table('setup_tokens',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('token_hash', sa.String(length=255), nullable=False),
+    sa.Column('company_name', sa.String(length=255), nullable=True),
+    sa.Column('jurisdiction', sa.String(length=20), nullable=True),
+    sa.Column('expires_at', postgresql.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column('used_at', postgresql.TIMESTAMP(timezone=True), nullable=True),
+    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('users',
     sa.Column('id', sa.UUID(), nullable=False),
@@ -186,6 +196,28 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['uploaded_by'], ['users.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('payment_methods',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('nickname', sa.String(length=100), nullable=True),
+    sa.Column('type', sa.String(length=20), nullable=False),
+    sa.Column('currency', sa.String(length=10), nullable=False),
+    sa.Column('bank_name', sa.String(length=255), nullable=True),
+    sa.Column('bank_account_number', sa.String(length=100), nullable=True),
+    sa.Column('bank_swift_code', sa.String(length=20), nullable=True),
+    sa.Column('wallet_address', sa.String(length=255), nullable=True),
+    sa.Column('chain_id', sa.String(length=50), nullable=True),
+    sa.Column('uen_number', sa.String(length=50), nullable=True),
+    sa.Column('is_default', sa.Boolean(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('metadata_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('created_by', sa.UUID(), nullable=True),
+    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['currency'], ['currencies.code'], ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('recurring_commitments',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
@@ -303,6 +335,7 @@ def upgrade() -> None:
     sa.Column('issued_pdf_file_id', sa.UUID(), nullable=True),
     sa.Column('recurring_rule_id', sa.UUID(), nullable=True),
     sa.Column('tax_inclusive', sa.Boolean(), nullable=False),
+    sa.Column('payment_method_id', sa.UUID(), nullable=True),
     sa.Column('idempotency_key', sa.String(length=100), nullable=True),
     sa.Column('created_by', sa.UUID(), nullable=False),
     sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -311,6 +344,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['currency'], ['currencies.code'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['issued_pdf_file_id'], ['files.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['payment_method_id'], ['payment_methods.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['recurring_rule_id'], ['recurring_invoice_rules.id'], name='fk_invoices_recurring_rule_id', ondelete='SET NULL', use_alter=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('idempotency_key', name='uq_invoices_idempotency_key'),
@@ -520,6 +554,7 @@ def downgrade() -> None:
     op.drop_table('task_templates')
     op.drop_table('role_permissions')
     op.drop_table('recurring_commitments')
+    op.drop_table('payment_methods')
     op.drop_table('files')
     op.drop_table('expenses')
     op.drop_table('employees')
@@ -531,6 +566,7 @@ def downgrade() -> None:
     op.drop_table('api_tokens')
     op.drop_table('accounts')
     op.drop_table('users')
+    op.drop_table('setup_tokens')
     op.drop_table('roles')
     op.drop_table('permissions')
     op.drop_table('currencies')
