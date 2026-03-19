@@ -85,6 +85,8 @@ async def confirm_expense(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InvalidTransitionError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    await db.commit()
+    expense = await expense_svc.get_expense(db, expense_id)
     return ExpenseResponse.model_validate(expense)
 
 

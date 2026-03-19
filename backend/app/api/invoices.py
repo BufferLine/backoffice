@@ -207,6 +207,10 @@ async def issue_invoice(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
+    await db.commit()
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise _not_found()
     return InvoiceResponse.model_validate(invoice)
 
 
@@ -233,6 +237,10 @@ async def mark_paid(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
+    await db.commit()
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise _not_found()
     return InvoiceResponse.model_validate(invoice)
 
 
@@ -257,6 +265,10 @@ async def cancel_invoice(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
+    await db.commit()
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise _not_found()
     return InvoiceResponse.model_validate(invoice)
 
 
