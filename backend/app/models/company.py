@@ -30,5 +30,10 @@ class CompanySettings(Base):
     jurisdiction: Mapped[str | None] = mapped_column(String(20), nullable=True, default="SG")
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    stamp_file_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
+    )
+
     logo_file = relationship("File", foreign_keys=[logo_file_id])
+    stamp_file = relationship("File", foreign_keys=[stamp_file_id])
     currency = relationship("Currency", foreign_keys=[default_currency])

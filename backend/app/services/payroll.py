@@ -245,7 +245,23 @@ async def finalize_payroll(
         "deductions": deductions_data,
     }
 
-    pdf_bytes = render_payslip_pdf(pdf_data)
+    # Load company stamp if available
+    stamp_bytes = None
+    stamp_mime = "image/png"
+    if company_settings and company_settings.stamp_file_id:
+        from app.models.file import File as FileModel
+        stamp_file_result = await db.execute(
+            select(FileModel).where(FileModel.id == company_settings.stamp_file_id)
+        )
+        stamp_file = stamp_file_result.scalar_one_or_none()
+        if stamp_file:
+            try:
+                stamp_bytes = file_storage.download(stamp_file.storage_key)
+                stamp_mime = stamp_file.mime_type or "image/png"
+            except Exception:
+                pass
+
+    pdf_bytes = render_payslip_pdf(pdf_data, stamp_bytes=stamp_bytes, stamp_mime=stamp_mime)
 
     filename = f"payslip_{run.employee.name.replace(' ', '_')}_{run.month.strftime('%Y-%m')}.pdf"
     storage_key, sha256, size = file_storage.upload(

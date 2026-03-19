@@ -188,6 +188,14 @@
   </div>
   {% endif %}
 
+  {% if stamp_uri %}
+  <!-- ── Company Stamp ──────────────────────────────────────── -->
+  <div style="margin-top:30px; text-align:right;">
+    <img src="{{ stamp_uri }}" alt="Company Stamp" style="max-width:150px; max-height:150px; opacity:0.85;" />
+    <p style="font-size:8pt; color:#666; margin-top:4px;">Authorized Signatory</p>
+  </div>
+  {% endif %}
+
   <!-- ── Footer ───────────────────────────────────────────── -->
   <div class="footer">
     {{ company.name }}{% if company.uen %} &middot; UEN {{ company.uen }}{% endif %}

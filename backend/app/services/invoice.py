@@ -399,7 +399,22 @@ async def _generate_invoice_pdf(
         "line_items": line_items_data,
     }
 
-    pdf_bytes = render_invoice_pdf(pdf_data)
+    # Load company stamp if available
+    stamp_bytes = None
+    stamp_mime = "image/png"
+    if company and company.stamp_file_id:
+        stamp_file_result = await db.execute(
+            select(File).where(File.id == company.stamp_file_id)
+        )
+        stamp_file = stamp_file_result.scalar_one_or_none()
+        if stamp_file:
+            try:
+                stamp_bytes = file_storage.download(stamp_file.storage_key)
+                stamp_mime = stamp_file.mime_type or "image/png"
+            except Exception:
+                pass  # stamp is optional, continue without it
+
+    pdf_bytes = render_invoice_pdf(pdf_data, stamp_bytes=stamp_bytes, stamp_mime=stamp_mime)
     filename = f"invoice-{invoice.invoice_number}.pdf"
 
     storage_key, sha256, size = file_storage.upload(
