@@ -26,35 +26,64 @@ _env.filters["money"] = _money
 _env.filters["pct"] = _pct
 
 
-def _encode_stamp(stamp_bytes: Optional[bytes], mime_type: str = "image/png") -> Optional[str]:
-    """Encode stamp image bytes as a data URI for embedding in HTML."""
-    if not stamp_bytes:
+_DEFAULT_THEME = {
+    "primary_color": "#1a56db",
+    "accent_color": "#374151",
+    "font_family": "Helvetica, Arial, sans-serif",
+}
+
+
+def _encode_image(image_bytes: Optional[bytes], mime_type: str = "image/png") -> Optional[str]:
+    """Encode image bytes as a data URI for embedding in HTML."""
+    if not image_bytes:
         return None
-    b64 = base64.b64encode(stamp_bytes).decode("ascii")
+    b64 = base64.b64encode(image_bytes).decode("ascii")
     return f"data:{mime_type};base64,{b64}"
 
 
-def render_invoice_pdf(data: dict[str, Any], stamp_bytes: Optional[bytes] = None, stamp_mime: str = "image/png") -> bytes:
+# Keep backward-compatible alias
+_encode_stamp = _encode_image
+
+
+def render_invoice_pdf(
+    data: dict[str, Any],
+    stamp_bytes: Optional[bytes] = None,
+    stamp_mime: str = "image/png",
+    logo_bytes: Optional[bytes] = None,
+    logo_mime: str = "image/png",
+    theme: Optional[dict] = None,
+) -> bytes:
     """Render invoice data to PDF bytes using WeasyPrint."""
     try:
         from weasyprint import HTML
     except ImportError:
         raise RuntimeError("WeasyPrint is not installed")
 
-    data["stamp_uri"] = _encode_stamp(stamp_bytes, stamp_mime)
+    data["stamp_uri"] = _encode_image(stamp_bytes, stamp_mime)
+    data["logo_uri"] = _encode_image(logo_bytes, logo_mime)
+    data["theme"] = {**_DEFAULT_THEME, **(theme or {})}
     template = _env.get_template("invoice.html")
     html_content = template.render(**data)
     return HTML(string=html_content).write_pdf()
 
 
-def render_payslip_pdf(data: dict[str, Any], stamp_bytes: Optional[bytes] = None, stamp_mime: str = "image/png") -> bytes:
+def render_payslip_pdf(
+    data: dict[str, Any],
+    stamp_bytes: Optional[bytes] = None,
+    stamp_mime: str = "image/png",
+    logo_bytes: Optional[bytes] = None,
+    logo_mime: str = "image/png",
+    theme: Optional[dict] = None,
+) -> bytes:
     """Render payslip data to PDF bytes using WeasyPrint."""
     try:
         from weasyprint import HTML
     except ImportError:
         raise RuntimeError("WeasyPrint is not installed")
 
-    data["stamp_uri"] = _encode_stamp(stamp_bytes, stamp_mime)
+    data["stamp_uri"] = _encode_image(stamp_bytes, stamp_mime)
+    data["logo_uri"] = _encode_image(logo_bytes, logo_mime)
+    data["theme"] = {**_DEFAULT_THEME, **(theme or {})}
     template = _env.get_template("payslip.html")
     html_content = template.render(**data)
     return HTML(string=html_content).write_pdf()

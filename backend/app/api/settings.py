@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,12 +8,14 @@ from app.api.deps import AuthenticatedUser, get_current_user, require_permission
 from app.database import get_db
 from app.models.company import CompanySettings
 from app.models.currency import Currency
+from app.models.file import File as FileRecord
 from app.schemas.company import (
     CompanySettingsResponse,
     CompanySettingsUpdate,
     CurrencyCreate,
     CurrencyResponse,
 )
+from app.services.file_storage import FileStorageService, get_file_storage
 
 router = APIRouter()
 
@@ -54,6 +56,120 @@ async def update_company_settings(
     await db.flush()
     await db.refresh(company)
     return CompanySettingsResponse.model_validate(company)
+
+
+@router.post("/company/logo", status_code=200)
+async def upload_logo(
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: UploadFile = File(...),
+    file_storage: FileStorageService = Depends(get_file_storage),
+) -> dict:
+    """Upload company logo image."""
+    result = await db.execute(select(CompanySettings).limit(1))
+    company = result.scalar_one_or_none()
+    if company is None:
+        company = CompanySettings()
+        db.add(company)
+        await db.flush()
+
+    storage_key, sha256, size = file_storage.upload(file.file, file.filename or "logo", file.content_type or "image/png")
+
+    file_record = FileRecord(
+        storage_key=storage_key,
+        original_filename=file.filename,
+        mime_type=file.content_type or "image/png",
+        size_bytes=size,
+        checksum_sha256=sha256,
+        uploaded_by=current_user.id,
+        linked_entity_type="company_settings",
+        linked_entity_id=company.id,
+    )
+    db.add(file_record)
+    await db.flush()
+
+    company.logo_file_id = file_record.id
+    await db.flush()
+
+    return {"logo_file_id": str(file_record.id), "message": "Logo uploaded"}
+
+
+@router.post("/company/stamp", status_code=200)
+async def upload_stamp(
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: UploadFile = File(...),
+    file_storage: FileStorageService = Depends(get_file_storage),
+) -> dict:
+    """Upload company stamp/chop image."""
+    result = await db.execute(select(CompanySettings).limit(1))
+    company = result.scalar_one_or_none()
+    if company is None:
+        company = CompanySettings()
+        db.add(company)
+        await db.flush()
+
+    storage_key, sha256, size = file_storage.upload(file.file, file.filename or "stamp", file.content_type or "image/png")
+
+    file_record = FileRecord(
+        storage_key=storage_key,
+        original_filename=file.filename,
+        mime_type=file.content_type or "image/png",
+        size_bytes=size,
+        checksum_sha256=sha256,
+        uploaded_by=current_user.id,
+        linked_entity_type="company_settings",
+        linked_entity_id=company.id,
+    )
+    db.add(file_record)
+    await db.flush()
+
+    company.stamp_file_id = file_record.id
+    await db.flush()
+
+    return {"stamp_file_id": str(file_record.id), "message": "Stamp uploaded"}
+
+
+@router.get("/company/logo")
+async def get_logo_url(
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: FileStorageService = Depends(get_file_storage),
+) -> dict:
+    """Get presigned URL for company logo."""
+    result = await db.execute(select(CompanySettings).limit(1))
+    company = result.scalar_one_or_none()
+    if company is None or company.logo_file_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No logo uploaded")
+
+    file_result = await db.execute(select(FileRecord).where(FileRecord.id == company.logo_file_id))
+    file_record = file_result.scalar_one_or_none()
+    if file_record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Logo file not found")
+
+    url = file_storage.get_presigned_url(file_record.storage_key)
+    return {"url": url, "logo_file_id": str(company.logo_file_id)}
+
+
+@router.get("/company/stamp")
+async def get_stamp_url(
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: FileStorageService = Depends(get_file_storage),
+) -> dict:
+    """Get presigned URL for company stamp."""
+    result = await db.execute(select(CompanySettings).limit(1))
+    company = result.scalar_one_or_none()
+    if company is None or company.stamp_file_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No stamp uploaded")
+
+    file_result = await db.execute(select(FileRecord).where(FileRecord.id == company.stamp_file_id))
+    file_record = file_result.scalar_one_or_none()
+    if file_record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stamp file not found")
+
+    url = file_storage.get_presigned_url(file_record.storage_key)
+    return {"url": url, "stamp_file_id": str(company.stamp_file_id)}
 
 
 @router.get("/currencies", response_model=list[CurrencyResponse])

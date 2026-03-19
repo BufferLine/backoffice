@@ -8,19 +8,19 @@
     @page { size: A4; margin: 20mm 18mm 20mm 18mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-family: {{ theme.font_family }};
       font-size: 10pt; line-height: 1.5; color: #1a1a2e; background: #fff;
     }
     .header {
       display: flex; justify-content: space-between; align-items: flex-start;
-      margin-bottom: 32pt; padding-bottom: 16pt; border-bottom: 2pt solid #1a1a2e;
+      margin-bottom: 32pt; padding-bottom: 16pt; border-bottom: 2pt solid {{ theme.primary_color }};
     }
     .company-info h1 { font-size: 16pt; font-weight: 700; margin-bottom: 4pt; }
     .company-info p { font-size: 9pt; color: #555; line-height: 1.7; }
     .doc-title { text-align: right; }
     .doc-title h2 {
       font-size: 24pt; font-weight: 700; letter-spacing: 0.08em;
-      text-transform: uppercase; color: #1a1a2e;
+      text-transform: uppercase; color: {{ theme.primary_color }};
     }
     .doc-title .doc-sub { font-size: 10pt; color: #555; margin-top: 4pt; }
     .meta-grid { display: flex; gap: 40pt; margin-bottom: 28pt; }
@@ -46,7 +46,7 @@
     }
     tfoot td.right { text-align: right; font-variant-numeric: tabular-nums; }
     .net-pay-box {
-      background-color: #1a1a2e; color: #fff;
+      background-color: {{ theme.primary_color }}; color: #fff;
       padding: 12pt 16pt; margin-bottom: 24pt;
       display: flex; justify-content: space-between; align-items: center;
     }
@@ -67,8 +67,8 @@
   <!-- ── Header ──────────────────────────────────────────── -->
   <div class="header">
     <div class="company-info">
-      {% if company.logo_url %}
-        <img src="{{ company.logo_url }}" alt="{{ company.name }}" style="height:36pt; margin-bottom:8pt; display:block;" />
+      {% if logo_uri %}
+        <img src="{{ logo_uri }}" alt="{{ company.name }}" style="max-height:60px; margin-bottom:8pt; display:block;" />
       {% endif %}
       <h1>{{ company.name }}</h1>
       <p>

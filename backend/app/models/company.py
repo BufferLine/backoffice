@@ -33,6 +33,11 @@ class CompanySettings(Base):
     stamp_file_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
     )
+    primary_color: Mapped[str | None] = mapped_column(String(7), nullable=True, default="#1a56db")
+    accent_color: Mapped[str | None] = mapped_column(String(7), nullable=True, default="#374151")
+    font_family: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, default="Helvetica, Arial, sans-serif"
+    )
 
     logo_file = relationship("File", foreign_keys=[logo_file_id])
     stamp_file = relationship("File", foreign_keys=[stamp_file_id])

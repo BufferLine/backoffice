@@ -42,6 +42,24 @@ def update(
     print_json(data)
 
 
+@app.command()
+def upload_logo(filepath: str = typer.Argument(..., help="Path to logo image file")) -> None:
+    """Upload company logo image."""
+    with open(filepath, "rb") as f:
+        files = {"file": (filepath.split("/")[-1], f, "image/png")}
+        resp = api_post("/api/settings/company/logo", files=files)
+    print_success(f"Logo uploaded: {resp.get('logo_file_id')}")
+
+
+@app.command()
+def upload_stamp(filepath: str = typer.Argument(..., help="Path to stamp image file")) -> None:
+    """Upload company stamp/chop image."""
+    with open(filepath, "rb") as f:
+        files = {"file": (filepath.split("/")[-1], f, "image/png")}
+        resp = api_post("/api/settings/company/stamp", files=files)
+    print_success(f"Stamp uploaded: {resp.get('stamp_file_id')}")
+
+
 @currency_app.command(name="add")
 def currency_add(
     code: str = typer.Option(..., "--code", help="Currency code (e.g. EUR)"),

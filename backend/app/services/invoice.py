@@ -414,7 +414,38 @@ async def _generate_invoice_pdf(
             except Exception:
                 pass  # stamp is optional, continue without it
 
-    pdf_bytes = render_invoice_pdf(pdf_data, stamp_bytes=stamp_bytes, stamp_mime=stamp_mime)
+    # Load company logo if available
+    logo_bytes = None
+    logo_mime = "image/png"
+    if company and company.logo_file_id:
+        logo_file_result = await db.execute(
+            select(File).where(File.id == company.logo_file_id)
+        )
+        logo_file = logo_file_result.scalar_one_or_none()
+        if logo_file:
+            try:
+                logo_bytes = file_storage.download(logo_file.storage_key)
+                logo_mime = logo_file.mime_type or "image/png"
+            except Exception:
+                pass  # logo is optional, continue without it
+
+    # Build theme from company branding settings
+    theme = None
+    if company:
+        theme = {
+            "primary_color": company.primary_color or "#1a56db",
+            "accent_color": company.accent_color or "#374151",
+            "font_family": company.font_family or "Helvetica, Arial, sans-serif",
+        }
+
+    pdf_bytes = render_invoice_pdf(
+        pdf_data,
+        stamp_bytes=stamp_bytes,
+        stamp_mime=stamp_mime,
+        logo_bytes=logo_bytes,
+        logo_mime=logo_mime,
+        theme=theme,
+    )
     filename = f"invoice-{invoice.invoice_number}.pdf"
 
     storage_key, sha256, size = file_storage.upload(

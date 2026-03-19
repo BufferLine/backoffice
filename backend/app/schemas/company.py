@@ -15,11 +15,15 @@ class CompanySettingsResponse(BaseModel):
     bank_account_number: Optional[str]
     bank_swift_code: Optional[str]
     logo_file_id: Optional[UUID]
+    stamp_file_id: Optional[UUID]
     default_currency: Optional[str]
     default_payment_terms_days: int
     gst_registered: bool
     gst_rate: Optional[Decimal]
     jurisdiction: Optional[str]
+    primary_color: Optional[str]
+    accent_color: Optional[str]
+    font_family: Optional[str]
 
     model_config = {"from_attributes": True}
 
@@ -37,6 +41,9 @@ class CompanySettingsUpdate(BaseModel):
     gst_registered: Optional[bool] = None
     gst_rate: Optional[Decimal] = None
     jurisdiction: Optional[str] = None
+    primary_color: Optional[str] = None
+    accent_color: Optional[str] = None
+    font_family: Optional[str] = None
 
 
 class CurrencyResponse(BaseModel):

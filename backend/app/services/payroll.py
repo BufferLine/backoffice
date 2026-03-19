@@ -261,7 +261,37 @@ async def finalize_payroll(
             except Exception:
                 pass
 
-    pdf_bytes = render_payslip_pdf(pdf_data, stamp_bytes=stamp_bytes, stamp_mime=stamp_mime)
+    # Load company logo if available
+    logo_bytes = None
+    logo_mime = "image/png"
+    if company_settings and company_settings.logo_file_id:
+        from app.models.file import File as FileModel
+        logo_file_result = await db.execute(
+            select(FileModel).where(FileModel.id == company_settings.logo_file_id)
+        )
+        logo_file = logo_file_result.scalar_one_or_none()
+        if logo_file:
+            try:
+                logo_bytes = file_storage.download(logo_file.storage_key)
+                logo_mime = logo_file.mime_type or "image/png"
+            except Exception:
+                pass
+
+    # Build theme from company branding settings
+    theme = {
+        "primary_color": company_settings.primary_color or "#1a56db",
+        "accent_color": company_settings.accent_color or "#374151",
+        "font_family": company_settings.font_family or "Helvetica, Arial, sans-serif",
+    }
+
+    pdf_bytes = render_payslip_pdf(
+        pdf_data,
+        stamp_bytes=stamp_bytes,
+        stamp_mime=stamp_mime,
+        logo_bytes=logo_bytes,
+        logo_mime=logo_mime,
+        theme=theme,
+    )
 
     filename = f"payslip_{run.employee.name.replace(' ', '_')}_{run.month.strftime('%Y-%m')}.pdf"
     storage_key, sha256, size = file_storage.upload(
