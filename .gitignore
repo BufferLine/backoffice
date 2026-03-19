@@ -43,3 +43,5 @@ htmlcov/
 
 # Alembic
 *.pyc
+account-settings-validation.png
+settings-impl.png
