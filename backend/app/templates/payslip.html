@@ -114,19 +114,19 @@
       <tbody>
         <tr>
           <td class="label">Monthly Base Salary</td>
-          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(payroll.monthly_base_salary) }}</td>
+          <td class="right">{{ payroll.currency }} {{ payroll.monthly_base_salary|money }}</td>
         </tr>
         {% if payroll.days_worked < payroll.days_in_month %}
         <tr>
           <td class="sublabel">Prorated ({{ payroll.days_worked }}/{{ payroll.days_in_month }} days)</td>
-          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(payroll.prorated_gross_salary) }}</td>
+          <td class="right">{{ payroll.currency }} {{ payroll.prorated_gross_salary|money }}</td>
         </tr>
         {% endif %}
       </tbody>
       <tfoot>
         <tr>
           <td>Gross Salary</td>
-          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(payroll.prorated_gross_salary) }}</td>
+          <td class="right">{{ payroll.currency }} {{ payroll.prorated_gross_salary|money }}</td>
         </tr>
       </tfoot>
     </table>
@@ -143,17 +143,17 @@
           <td class="label">
             {{ d.description }}
             {% if d.rate %}
-              <span style="font-size:8pt; color:#888;">({{ (d.rate * 100)|round(2) }}%)</span>
+              <span style="font-size:8pt; color:#888;">({{ d.rate|pct }}%)</span>
             {% endif %}
           </td>
-          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(d.amount) }}</td>
+          <td class="right">{{ payroll.currency }} {{ d.amount|money }}</td>
         </tr>
         {% endfor %}
       </tbody>
       <tfoot>
         <tr>
           <td>Total Deductions</td>
-          <td class="right">{{ payroll.currency }} {{ "%.2f"|format(payroll.total_deductions) }}</td>
+          <td class="right">{{ payroll.currency }} {{ payroll.total_deductions|money }}</td>
         </tr>
       </tfoot>
     </table>
@@ -163,7 +163,7 @@
   <!-- ── Net Pay ──────────────────────────────────────────── -->
   <div class="net-pay-box">
     <span class="net-label">Net Pay</span>
-    <span class="net-amount">{{ payroll.currency }} {{ "%.2f"|format(payroll.net_salary) }}</span>
+    <span class="net-amount">{{ payroll.currency }} {{ payroll.net_salary|money }}</span>
   </div>
 
   <!-- ── Payment Info ─────────────────────────────────────── -->

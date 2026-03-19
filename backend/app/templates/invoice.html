@@ -126,8 +126,8 @@
       <tr>
         <td>{{ item.description }}</td>
         <td class="right">{{ item.quantity }}</td>
-        <td class="right">{{ invoice.currency }} {{ "%.2f"|format(item.unit_price) }}</td>
-        <td class="right">{{ invoice.currency }} {{ "%.2f"|format(item.amount) }}</td>
+        <td class="right">{{ invoice.currency }} {{ item.unit_price|money }}</td>
+        <td class="right">{{ invoice.currency }} {{ item.amount|money }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -139,19 +139,19 @@
       <tbody>
         <tr>
           <td class="label">Subtotal</td>
-          <td class="amount">{{ invoice.currency }} {{ "%.2f"|format(invoice.subtotal_amount) }}</td>
+          <td class="amount">{{ invoice.currency }} {{ invoice.subtotal_amount|money }}</td>
         </tr>
         {% if invoice.tax_amount %}
         <tr>
           <td class="label">
-            {% if invoice.tax_rate %}GST ({{ (invoice.tax_rate * 100)|round(1) }}%){% else %}Tax{% endif %}
+            {% if invoice.tax_rate %}GST ({{ invoice.tax_rate|pct }}%){% else %}Tax{% endif %}
           </td>
-          <td class="amount">{{ invoice.currency }} {{ "%.2f"|format(invoice.tax_amount) }}</td>
+          <td class="amount">{{ invoice.currency }} {{ invoice.tax_amount|money }}</td>
         </tr>
         {% endif %}
         <tr class="total-row">
           <td class="label">Total</td>
-          <td class="amount">{{ invoice.currency }} {{ "%.2f"|format(invoice.total_amount) }}</td>
+          <td class="amount">{{ invoice.currency }} {{ invoice.total_amount|money }}</td>
         </tr>
       </tbody>
     </table>
