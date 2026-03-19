@@ -3,7 +3,7 @@ from typing import Optional
 
 import typer
 
-from acct.api_client import api_delete, api_get, api_patch, api_post
+from acct.api_client import api_delete, api_download, api_get, api_patch, api_post
 from acct.formatters import print_json, print_success, print_table
 
 app = typer.Typer(help="Invoice management commands")
@@ -142,3 +142,13 @@ def attach(
         data = api_post(f"/api/invoices/{invoice_id}/attachments", files=files)
     print_success(f"File attached to invoice {invoice_id}")
     print_json(data)
+
+
+@app.command()
+def download(
+    invoice_id: str = typer.Argument(..., help="Invoice ID"),
+    output: str = typer.Option(".", "-o", "--output", help="Output directory or file path"),
+) -> None:
+    """Download invoice PDF."""
+    filepath = api_download(f"/api/invoices/{invoice_id}/pdf", output)
+    print_success(f"Downloaded: {filepath}")

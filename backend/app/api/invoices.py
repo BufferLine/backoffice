@@ -1,7 +1,9 @@
+import io
 import uuid
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -307,3 +309,38 @@ async def attach_file(
     await db.refresh(file_record)
 
     return {"file_id": str(file_record.id), "storage_key": storage_key}
+
+
+@router.get("/{invoice_id}/pdf")
+async def download_invoice_pdf(
+    invoice_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:read"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> StreamingResponse:
+    """Download the issued invoice PDF."""
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise _not_found()
+
+    if invoice.issued_pdf_file_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No PDF available for this invoice. Issue the invoice first.",
+        )
+
+    result = await db.execute(select(File).where(File.id == invoice.issued_pdf_file_id))
+    file_record = result.scalar_one_or_none()
+    if not file_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF file not found")
+
+    content = file_storage.download(file_record.storage_key)
+    filename = file_record.original_filename or f"invoice-{invoice_id}.pdf"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=file_record.mime_type or "application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(content)),
+        },
+    )

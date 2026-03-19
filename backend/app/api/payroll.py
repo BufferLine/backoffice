@@ -1,7 +1,9 @@
+import io
 import uuid
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -220,6 +222,41 @@ async def mark_payroll_paid(
     await db.commit()
     run = await payroll_service.get_payroll_run(db, run_id)
     return PayrollRunResponse.model_validate(run)
+
+
+@router.get("/runs/{run_id}/pdf")
+async def download_payslip_pdf(
+    run_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:read"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> StreamingResponse:
+    """Download the payslip PDF for a finalized payroll run."""
+    run = await payroll_service.get_payroll_run(db, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payroll run not found")
+
+    if run.payslip_file_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No payslip PDF available. Finalize the payroll run first.",
+        )
+
+    result = await db.execute(select(FileModel).where(FileModel.id == run.payslip_file_id))
+    file_record = result.scalar_one_or_none()
+    if not file_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payslip file not found")
+
+    content = file_storage.download(file_record.storage_key)
+    filename = file_record.original_filename or f"payslip-{run_id}.pdf"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=file_record.mime_type or "application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(content)),
+        },
+    )
 
 
 @router.post("/runs/{run_id}/attach-file", response_model=PayrollRunResponse)

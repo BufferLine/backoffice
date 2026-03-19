@@ -2,7 +2,7 @@ from typing import Optional
 
 import typer
 
-from acct.api_client import api_get, api_post
+from acct.api_client import api_download, api_get, api_post
 from acct.formatters import print_json, print_success, print_table
 
 app = typer.Typer(help="Payroll run commands")
@@ -94,3 +94,13 @@ def show(
     """Show payroll run details."""
     data = api_get(f"/api/payroll/runs/{payroll_id}")
     print_json(data)
+
+
+@app.command()
+def download(
+    payroll_id: str = typer.Argument(..., help="Payroll run ID"),
+    output: str = typer.Option(".", "-o", "--output", help="Output directory or file path"),
+) -> None:
+    """Download payslip PDF."""
+    filepath = api_download(f"/api/payroll/runs/{payroll_id}/pdf", output)
+    print_success(f"Downloaded: {filepath}")

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, automation, bank_reconciliation, changelog, clients, expenses, exports, invoices, payments, payroll, setup, tasks, users
+from app.api import auth, automation, bank_reconciliation, changelog, clients, expenses, exports, files, invoices, payments, payroll, setup, tasks, users
 from app.api import settings as settings_router
 from app.api import accounts, transactions, recurring_commitments
 from app.api.payroll import employees_router
@@ -82,6 +82,7 @@ app.include_router(employees_router, prefix="/api/employees", tags=["employees"]
 app.include_router(expenses.router, prefix="/api/expenses", tags=["expenses"])
 app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 app.include_router(exports.router, prefix="/api/exports", tags=["exports"])
+app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(automation.router, prefix="/api/automation", tags=["automation"])
 app.include_router(bank_reconciliation.router, prefix="/api", tags=["bank-reconciliation"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])

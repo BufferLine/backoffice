@@ -1,3 +1,5 @@
+import os
+
 import httpx
 import typer
 from acct.config import get_api_url, get_token
@@ -43,6 +45,25 @@ def api_delete(path: str) -> dict:
             return resp.json()
         except Exception:
             return {}
+
+
+def api_download(path: str, output_path: str) -> str:
+    """Download a file from the API and save to disk. Returns saved filepath."""
+    with get_client() as client:
+        resp = client.get(path)
+        _handle_error(resp)
+        cd = resp.headers.get("content-disposition", "")
+        filename = "download"
+        if "filename=" in cd:
+            filename = cd.split("filename=")[1].strip('"')
+
+        if os.path.isdir(output_path):
+            filepath = os.path.join(output_path, filename)
+        else:
+            filepath = output_path
+        with open(filepath, "wb") as f:
+            f.write(resp.content)
+        return filepath
 
 
 def _handle_error(resp: httpx.Response) -> None:
