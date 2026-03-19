@@ -22,18 +22,42 @@ def show() -> None:
 def update(
     company_name: Optional[str] = typer.Option(None, "--company-name", help="Company legal name"),
     uen: Optional[str] = typer.Option(None, "--uen", help="UEN (Unique Entity Number)"),
-    default_currency: Optional[str] = typer.Option(
-        None, "--default-currency", help="Default currency code"
-    ),
+    address: Optional[str] = typer.Option(None, "--address", help="Company address"),
+    billing_email: Optional[str] = typer.Option(None, "--billing-email", help="Billing email"),
+    bank_name: Optional[str] = typer.Option(None, "--bank-name", help="Bank name"),
+    bank_account: Optional[str] = typer.Option(None, "--bank-account", help="Bank account number"),
+    bank_swift: Optional[str] = typer.Option(None, "--bank-swift", help="SWIFT/BIC code"),
+    default_currency: Optional[str] = typer.Option(None, "--default-currency", help="Default currency code"),
+    payment_terms: Optional[int] = typer.Option(None, "--payment-terms", help="Default payment terms (days)"),
+    gst_registered: Optional[bool] = typer.Option(None, "--gst-registered", help="GST registered"),
+    gst_rate: Optional[float] = typer.Option(None, "--gst-rate", help="GST rate (e.g. 0.09)"),
+    jurisdiction: Optional[str] = typer.Option(None, "--jurisdiction", help="Jurisdiction code (SG, KR)"),
+    primary_color: Optional[str] = typer.Option(None, "--primary-color", help="Primary theme color (hex)"),
+    accent_color: Optional[str] = typer.Option(None, "--accent-color", help="Accent theme color (hex)"),
+    font_family: Optional[str] = typer.Option(None, "--font-family", help="PDF font family"),
 ) -> None:
     """Update system settings."""
-    payload: dict = {}
-    if company_name is not None:
-        payload["legal_name"] = company_name
-    if uen is not None:
-        payload["uen"] = uen
-    if default_currency is not None:
-        payload["default_currency"] = default_currency
+    field_map = {
+        "legal_name": company_name,
+        "uen": uen,
+        "address": address,
+        "billing_email": billing_email,
+        "bank_name": bank_name,
+        "bank_account_number": bank_account,
+        "bank_swift_code": bank_swift,
+        "default_currency": default_currency,
+        "default_payment_terms_days": payment_terms,
+        "gst_registered": gst_registered,
+        "gst_rate": gst_rate,
+        "jurisdiction": jurisdiction,
+        "primary_color": primary_color,
+        "accent_color": accent_color,
+        "font_family": font_family,
+    }
+    payload = {k: v for k, v in field_map.items() if v is not None}
+    if not payload:
+        typer.echo("No options provided. Use --help to see available options.")
+        raise typer.Exit(1)
     data = api_patch("/api/settings/company", json_data=payload)
     print_success("Settings updated")
     print_json(data)
