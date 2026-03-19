@@ -8,6 +8,7 @@ from app.models.expense import Expense
 from app.models.payment import Payment
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate
 from app.services.audit import AuditService
+from app.services.changelog import track_status_change
 from app.state_machines.expense import expense_machine
 from app.state_machines import InvalidTransitionError
 
@@ -62,9 +63,11 @@ async def confirm_expense(
     user_id: uuid.UUID,
 ) -> Expense:
     expense = await get_expense(db, expense_id)
+    old_state = expense.status
     new_state = expense_machine.transition(expense.status, "confirm")
     expense.status = new_state
     await db.flush()
+    await track_status_change(db, "expense", expense.id, old_state, new_state, changed_by=user_id)
     await AuditService(db).log(
         action="expense.confirm",
         entity_type="expense",
@@ -91,9 +94,11 @@ async def reimburse_expense(
     if payment is None:
         raise ValueError(f"Payment {payment_id} not found")
 
+    old_state = expense.status
     new_state = expense_machine.transition(expense.status, "reimburse")
     expense.status = new_state
     await db.flush()
+    await track_status_change(db, "expense", expense.id, old_state, new_state, changed_by=user_id)
     await AuditService(db).log(
         action="expense.reimburse",
         entity_type="expense",

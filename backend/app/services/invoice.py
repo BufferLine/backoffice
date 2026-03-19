@@ -15,6 +15,7 @@ from app.models.file import File
 from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.payment import Payment
 from app.services.audit import AuditService
+from app.services.changelog import track_status_change
 from app.services.file_storage import FileStorageService
 from app.services.pdf import render_invoice_pdf
 from app.state_machines import InvalidTransitionError
@@ -322,9 +323,13 @@ async def issue_invoice(
     invoice.issued_pdf_file_id = pdf_data
 
     # Transition state
+    old_status = invoice.status
     invoice.status = invoice_machine.transition(invoice.status, "issue")
 
     await db.flush()
+
+    # Change log
+    await track_status_change(db, "invoice", invoice.id, old_status, invoice.status, changed_by=user_id)
 
     # Audit log
     audit = AuditService(db)
@@ -490,8 +495,11 @@ async def mark_paid(
     if payment is None:
         raise ValueError("Payment not found or not linked to this invoice")
 
+    old_status = invoice.status
     invoice.status = invoice_machine.transition(invoice.status, "mark_paid")
     await db.flush()
+
+    await track_status_change(db, "invoice", invoice.id, old_status, invoice.status, changed_by=user_id)
 
     audit = AuditService(db)
     await audit.log(
@@ -527,8 +535,11 @@ async def cancel_invoice(
         if payment_count > 0:
             raise ValueError("Cannot cancel an issued invoice with linked payments")
 
+    old_status = invoice.status
     invoice.status = invoice_machine.transition(invoice.status, "cancel")
     await db.flush()
+
+    await track_status_change(db, "invoice", invoice.id, old_status, invoice.status, changed_by=user_id)
 
     audit = AuditService(db)
     await audit.log(

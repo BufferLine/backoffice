@@ -21,6 +21,7 @@ from app.schemas.payroll import (
 )
 from app.services import payroll as payroll_service
 from app.services.audit import AuditService
+from app.services.changelog import track_entity_update
 from app.services.file_storage import FileStorageService, get_file_storage
 from app.state_machines import InvalidTransitionError
 
@@ -81,11 +82,14 @@ async def update_employee(
     current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> EmployeeResponse:
-    employee = await payroll_service.update_employee(
-        db, employee_id, body.model_dump(exclude_unset=True)
-    )
+    update_data = body.model_dump(exclude_unset=True)
+    # Fetch employee first so we can snapshot values for changelog
+    result = await db.execute(select(Employee).where(Employee.id == employee_id))
+    employee = result.scalar_one_or_none()
     if employee is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+    # track_entity_update snapshots old values, applies the updates, and records diffs
+    await track_entity_update(db, "employee", employee, update_data, changed_by=current_user.id)
     await db.commit()
     await db.refresh(employee)
     return EmployeeResponse.model_validate(employee)

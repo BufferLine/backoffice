@@ -13,3 +13,4 @@ from app.models.payment import Payment  # noqa: F401
 from app.models.payroll import Employee, PayrollDeduction, PayrollRun  # noqa: F401
 from app.models.task import TaskInstance, TaskTemplate  # noqa: F401
 from app.models.user import ApiToken, Permission, Role, User, role_permissions, user_roles  # noqa: F401
+from app.models.changelog import ChangeLog  # noqa: F401

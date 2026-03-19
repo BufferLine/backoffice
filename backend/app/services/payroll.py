@@ -15,6 +15,7 @@ from app.models.file import File
 from app.models.payment import Payment
 from app.models.payroll import Employee, PayrollDeduction, PayrollRun
 from app.services.audit import AuditService
+from app.services.changelog import track_status_change
 from app.services.file_storage import FileStorageService
 from app.services.pdf import render_payslip_pdf
 from app.state_machines import InvalidTransitionError
@@ -177,9 +178,12 @@ async def review_payroll(db: AsyncSession, run_id: uuid.UUID, user_id: uuid.UUID
     if run is None:
         return None
 
+    old_state = run.status
     new_state = payroll_machine.transition(run.status, "review")
     run.status = new_state
     await db.flush()
+
+    await track_status_change(db, "payroll_run", run_id, old_state, new_state, changed_by=user_id)
 
     audit = AuditService(db)
     await audit.log(
@@ -202,6 +206,7 @@ async def finalize_payroll(
     if run is None:
         return None
 
+    old_state = run.status
     new_state = payroll_machine.transition(run.status, "finalize")
     run.status = new_state
 
@@ -314,6 +319,8 @@ async def finalize_payroll(
     run.payslip_file_id = file_record.id
     await db.flush()
 
+    await track_status_change(db, "payroll_run", run_id, old_state, new_state, changed_by=user_id)
+
     audit = AuditService(db)
     await audit.log(
         action="payroll.finalize",
@@ -361,11 +368,14 @@ async def mark_paid(
             f"Payment currency {payment.currency} does not match payroll currency {run.currency}"
         )
 
+    old_state = run.status
     new_state = payroll_machine.transition(run.status, "mark_paid")
     run.status = new_state
     run.paid_at = datetime.now(tz=timezone.utc)
     run.payment_id = payment_id
     await db.flush()
+
+    await track_status_change(db, "payroll_run", run_id, old_state, new_state, changed_by=user_id)
 
     audit = AuditService(db)
     await audit.log(

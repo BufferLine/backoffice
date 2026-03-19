@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, automation, bank_reconciliation, clients, expenses, exports, invoices, payments, payroll, tasks, users
+from app.api import auth, automation, bank_reconciliation, changelog, clients, expenses, exports, invoices, payments, payroll, tasks, users
 from app.api import settings as settings_router
 from app.api.payroll import employees_router
 from app.config import settings
@@ -57,6 +57,7 @@ app.include_router(automation.router, prefix="/api/automation", tags=["automatio
 app.include_router(bank_reconciliation.router, prefix="/api", tags=["bank-reconciliation"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+app.include_router(changelog.router, prefix="/api/changelog", tags=["changelog"])
 
 
 @app.get("/health")
