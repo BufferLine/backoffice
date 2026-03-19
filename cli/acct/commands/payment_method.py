@@ -80,6 +80,37 @@ def show(method_id: str = typer.Argument(..., help="Payment method ID")) -> None
 
 
 @app.command()
+def update(
+    method_id: str = typer.Argument(..., help="Payment method ID"),
+    name: Optional[str] = typer.Option(None, "--name"),
+    nickname: Optional[str] = typer.Option(None, "--nickname"),
+    type: Optional[str] = typer.Option(None, "--type"),
+    currency: Optional[str] = typer.Option(None, "--currency"),
+    bank_name: Optional[str] = typer.Option(None, "--bank-name"),
+    bank_account: Optional[str] = typer.Option(None, "--bank-account"),
+    bank_swift: Optional[str] = typer.Option(None, "--bank-swift"),
+    wallet: Optional[str] = typer.Option(None, "--wallet"),
+    chain: Optional[str] = typer.Option(None, "--chain"),
+    uen: Optional[str] = typer.Option(None, "--uen"),
+    default: Optional[bool] = typer.Option(None, "--default"),
+) -> None:
+    """Update a payment method."""
+    field_map = {
+        "name": name, "nickname": nickname, "type": type, "currency": currency,
+        "bank_name": bank_name, "bank_account_number": bank_account,
+        "bank_swift_code": bank_swift, "wallet_address": wallet,
+        "chain_id": chain, "uen_number": uen, "is_default": default,
+    }
+    payload = {k: v for k, v in field_map.items() if v is not None}
+    if not payload:
+        typer.echo("No options provided. Use --help to see available options.")
+        raise typer.Exit(1)
+    data = api_patch(f"/api/payment-methods/{method_id}", json_data=payload)
+    print_success("Payment method updated")
+    print_json(data)
+
+
+@app.command()
 def deactivate(method_id: str = typer.Argument(..., help="Payment method ID")) -> None:
     """Deactivate a payment method."""
     api_delete(f"/api/payment-methods/{method_id}")
