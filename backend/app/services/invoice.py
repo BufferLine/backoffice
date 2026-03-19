@@ -5,6 +5,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -20,25 +21,24 @@ from app.state_machines import InvalidTransitionError
 from app.state_machines.invoice import invoice_machine
 
 
-async def generate_invoice_number(db: AsyncSession) -> str:
-    """Generate next sequential invoice number for the current year (INV-YYYY-NNNN).
-
-    Uses SELECT FOR UPDATE on the invoices table to ensure atomicity under concurrent load.
-    """
+async def _next_invoice_number(db: AsyncSession) -> str:
+    """Derive the next invoice number by finding the current MAX for this year."""
     year = datetime.now(timezone.utc).year
     prefix = f"INV-{year}-"
 
-    # Count existing invoices for this year to derive next sequence number.
-    # We lock the count with a subquery approach — since PostgreSQL doesn't have
-    # a lightweight advisory lock here, we do a simple max extraction and rely on
-    # the unique constraint on invoice_number to catch races.
     result = await db.execute(
-        select(func.count(Invoice.id)).where(
+        select(func.max(Invoice.invoice_number)).where(
             Invoice.invoice_number.like(f"{prefix}%")
         )
     )
-    count = result.scalar_one() or 0
-    next_num = count + 1
+    max_number = result.scalar_one_or_none()
+    if max_number is None:
+        next_num = 1
+    else:
+        try:
+            next_num = int(max_number.split("-")[-1]) + 1
+        except (ValueError, IndexError):
+            next_num = 1
     return f"{prefix}{next_num:04d}"
 
 
@@ -87,26 +87,36 @@ async def create_invoice(
     payment_method: Optional[str] = None,
     wallet_address: Optional[str] = None,
 ) -> Invoice:
-    """Create a new draft invoice with auto-generated invoice number."""
-    invoice_number = await generate_invoice_number(db)
+    """Create a new draft invoice with auto-generated invoice number.
 
-    invoice = Invoice(
-        invoice_number=invoice_number,
-        client_id=client_id,
-        currency=currency,
-        description=description,
-        payment_method=payment_method,
-        wallet_address=wallet_address,
-        created_by=created_by,
-        status="draft",
-        subtotal_amount=0.0,
-        tax_amount=0.0,
-        total_amount=0.0,
-    )
-    db.add(invoice)
-    await db.flush()
-    await db.refresh(invoice, ["line_items"])
-    return invoice
+    Uses a retry loop (up to 3 attempts) to handle concurrent inserts that
+    collide on the unique invoice_number constraint.
+    """
+    last_error: Exception = RuntimeError("Invoice number generation failed")
+    for _ in range(3):
+        invoice_number = await _next_invoice_number(db)
+        invoice = Invoice(
+            invoice_number=invoice_number,
+            client_id=client_id,
+            currency=currency,
+            description=description,
+            payment_method=payment_method,
+            wallet_address=wallet_address,
+            created_by=created_by,
+            status="draft",
+            subtotal_amount=0.0,
+            tax_amount=0.0,
+            total_amount=0.0,
+        )
+        db.add(invoice)
+        try:
+            await db.flush()
+            await db.refresh(invoice, ["line_items"])
+            return invoice
+        except IntegrityError as e:
+            await db.rollback()
+            last_error = e
+    raise ValueError("Could not generate a unique invoice number after 3 attempts") from last_error
 
 
 async def get_invoice(db: AsyncSession, invoice_id: uuid.UUID) -> Optional[Invoice]:
@@ -307,13 +317,9 @@ async def issue_invoice(
     from datetime import timedelta
     invoice.due_date = today + timedelta(days=payment_terms_days)
 
-    # Generate PDF
-    try:
-        pdf_data = await _generate_invoice_pdf(db, invoice, company, file_storage)
-        invoice.issued_pdf_file_id = pdf_data
-    except Exception:
-        # PDF generation failure should not block issuance
-        pass
+    # Generate PDF — failure blocks issuance so the caller is informed
+    pdf_data = await _generate_invoice_pdf(db, invoice, company, file_storage)
+    invoice.issued_pdf_file_id = pdf_data
 
     # Transition state
     invoice.status = invoice_machine.transition(invoice.status, "issue")

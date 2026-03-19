@@ -93,6 +93,7 @@ async def auto_match(db: AsyncSession) -> AutoMatchResult:
     matched_count = 0
     unmatched_count = 0
     results: list[AutoMatchResultItem] = []
+    matched_payment_ids: set[uuid.UUID] = set()
 
     for tx in unmatched_txs:
         date_from = tx.tx_date - timedelta(days=3)
@@ -112,6 +113,8 @@ async def auto_match(db: AsyncSession) -> AutoMatchResult:
         best_confidence = 0.0
 
         for payment in candidates:
+            if payment.id in matched_payment_ids:
+                continue
             confidence = 0.5  # Base confidence for amount + currency + date match
 
             # Boost confidence if reference/counterparty matches
@@ -135,6 +138,7 @@ async def auto_match(db: AsyncSession) -> AutoMatchResult:
             tx.matched_payment_id = best_payment.id
             tx.match_status = "auto_matched"
             tx.match_confidence = round(best_confidence, 2)
+            matched_payment_ids.add(best_payment.id)
             matched_count += 1
             results.append(
                 AutoMatchResultItem(

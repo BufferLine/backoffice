@@ -11,6 +11,7 @@ from app.models.payroll import PayrollRun
 from app.schemas.payment import PaymentCreate
 from app.services.audit import AuditService
 from app.state_machines.invoice import invoice_machine
+from app.state_machines.payroll import payroll_machine
 
 
 async def record_payment(
@@ -115,6 +116,13 @@ async def link_payment(
 ) -> Payment:
     payment = await get_payment(db, payment_id)
 
+    # Prevent reassigning a payment already linked elsewhere
+    if payment.related_entity_id is not None and payment.related_entity_id != entity_id:
+        raise ValueError(
+            f"Payment {payment_id} is already linked to {payment.related_entity_type} "
+            f"{payment.related_entity_id}"
+        )
+
     if entity_type == "invoice":
         result = await db.execute(select(Invoice).where(Invoice.id == entity_id))
         invoice = result.scalar_one_or_none()
@@ -122,6 +130,17 @@ async def link_payment(
             raise ValueError(f"Invoice {entity_id} not found")
         if invoice.status != "issued":
             raise ValueError(f"Invoice must be in 'issued' state to link payment, current: {invoice.status}")
+
+        # Validate amount and currency
+        if float(payment.amount) < float(invoice.total_amount):
+            raise ValueError(
+                f"Payment amount {payment.amount} is less than invoice total {invoice.total_amount}"
+            )
+        if payment.currency != invoice.currency:
+            raise ValueError(
+                f"Payment currency {payment.currency} does not match invoice currency {invoice.currency}"
+            )
+
         new_state = invoice_machine.transition(invoice.status, "mark_paid")
         invoice.status = new_state
         await db.flush()
@@ -134,13 +153,39 @@ async def link_payment(
             output_data={"status": new_state},
         )
 
-    elif entity_type == "payroll":
+    elif entity_type == "payroll_run":
         result = await db.execute(select(PayrollRun).where(PayrollRun.id == entity_id))
         payroll_run = result.scalar_one_or_none()
         if payroll_run is None:
             raise ValueError(f"PayrollRun {entity_id} not found")
         if payroll_run.status != "finalized":
             raise ValueError(f"PayrollRun must be in 'finalized' state to link payment, current: {payroll_run.status}")
+
+        # Validate amount and currency
+        if float(payment.amount) != float(payroll_run.net_salary):
+            raise ValueError(
+                f"Payment amount {payment.amount} does not match payroll net salary {payroll_run.net_salary}"
+            )
+        if payment.currency != payroll_run.currency:
+            raise ValueError(
+                f"Payment currency {payment.currency} does not match payroll currency {payroll_run.currency}"
+            )
+
+        # Transition payroll run to paid
+        from datetime import datetime, timezone
+        new_state = payroll_machine.transition(payroll_run.status, "mark_paid")
+        payroll_run.status = new_state
+        payroll_run.paid_at = datetime.now(tz=timezone.utc)
+        payroll_run.payment_id = payment.id
+        await db.flush()
+        await AuditService(db).log(
+            action="payroll.mark_paid",
+            entity_type="payroll_run",
+            entity_id=payroll_run.id,
+            actor_id=actor_id,
+            input_data={"payment_id": str(payment_id)},
+            output_data={"status": new_state},
+        )
 
     payment.related_entity_type = entity_type
     payment.related_entity_id = entity_id

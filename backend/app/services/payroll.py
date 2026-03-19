@@ -295,6 +295,26 @@ async def mark_paid(
     if payment is None:
         raise ValueError(f"Payment {payment_id} not found")
 
+    # Prevent payment reuse: reject if already linked to another payroll run
+    existing_result = await db.execute(
+        select(PayrollRun).where(
+            PayrollRun.payment_id == payment_id,
+            PayrollRun.id != run_id,
+        )
+    )
+    if existing_result.scalar_one_or_none() is not None:
+        raise ValueError(f"Payment {payment_id} is already linked to another payroll run")
+
+    # Validate amount and currency match
+    if Decimal(str(payment.amount)) != Decimal(str(run.net_salary)):
+        raise ValueError(
+            f"Payment amount {payment.amount} does not match payroll net salary {run.net_salary}"
+        )
+    if payment.currency != run.currency:
+        raise ValueError(
+            f"Payment currency {payment.currency} does not match payroll currency {run.currency}"
+        )
+
     new_state = payroll_machine.transition(run.status, "mark_paid")
     run.status = new_state
     run.paid_at = datetime.now(tz=timezone.utc)

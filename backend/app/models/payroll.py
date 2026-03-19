@@ -39,6 +39,7 @@ class PayrollRun(Base):
     __tablename__ = "payroll_runs"
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_payroll_runs_idempotency_key"),
+        UniqueConstraint("employee_id", "month", name="uq_payroll_runs_employee_month"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
