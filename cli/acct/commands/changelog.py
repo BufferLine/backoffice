@@ -23,9 +23,11 @@ def history(
     if not items:
         typer.echo("No change logs found.")
         return
+    cols = ["field_name", "old_value", "new_value", "changed_by", "created_at"]
     print_table(
-        items,
-        columns=["field_name", "old_value", "new_value", "changed_by", "created_at"],
+        "Change History",
+        cols,
+        [[str(item.get(c, "")) for c in cols] for item in items],
     )
 
 
@@ -44,7 +46,9 @@ def period(
     if not items:
         typer.echo("No change logs found.")
         return
+    cols = ["entity_type", "entity_id", "field_name", "old_value", "new_value", "created_at"]
     print_table(
-        items,
-        columns=["entity_type", "entity_id", "field_name", "old_value", "new_value", "created_at"],
+        "Change Log",
+        cols,
+        [[str(item.get(c, "")) for c in cols] for item in items],
     )

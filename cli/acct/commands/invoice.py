@@ -50,7 +50,7 @@ def add_item(
 ) -> None:
     """Add a line item to an invoice."""
     data = api_post(
-        f"/api/invoices/{invoice_id}/items",
+        f"/api/invoices/{invoice_id}/line-items",
         json_data={"description": desc, "quantity": qty, "unit_price": price},
     )
     print_success(f"Item added to invoice {invoice_id}")

@@ -297,10 +297,6 @@ async def issue_invoice(
     file_storage: FileStorageService,
 ) -> Invoice:
     """Issue a draft invoice: validate, set dates, generate PDF, transition state."""
-    # Idempotency: already issued
-    if invoice.status == "issued":
-        return invoice
-
     # Validate transition (raises InvalidTransitionError if not allowed)
     if not invoice_machine.can_transition(invoice.status, "issue"):
         raise InvalidTransitionError("invoice", invoice.status, "issue")
