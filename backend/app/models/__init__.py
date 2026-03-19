@@ -11,4 +11,5 @@ from app.models.file import File  # noqa: F401
 from app.models.invoice import Invoice, InvoiceLineItem, RecurringInvoiceRule  # noqa: F401
 from app.models.payment import Payment  # noqa: F401
 from app.models.payroll import Employee, PayrollDeduction, PayrollRun  # noqa: F401
+from app.models.task import TaskInstance, TaskTemplate  # noqa: F401
 from app.models.user import ApiToken, Permission, Role, User, role_permissions, user_roles  # noqa: F401

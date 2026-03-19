@@ -1,6 +1,6 @@
 import typer
 
-from acct.commands import auth, automation, bank, employee, expense, export, invoice, payment, payroll, settings
+from acct.commands import auth, automation, bank, employee, expense, export, invoice, payment, payroll, settings, todo
 
 app = typer.Typer(name="acct", help="Backoffice Operations CLI")
 
@@ -15,6 +15,7 @@ app.add_typer(automation.app, name="automation")
 app.add_typer(settings.app, name="settings")
 app.add_typer(bank.app, name="bank")
 app.add_typer(settings.currency_app, name="currency")
+app.add_typer(todo.app, name="todo")
 
 
 @app.command()

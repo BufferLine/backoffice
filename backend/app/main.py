@@ -3,12 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, automation, bank_reconciliation, clients, expenses, exports, invoices, payments, payroll, users
+from app.api import auth, automation, bank_reconciliation, clients, expenses, exports, invoices, payments, payroll, tasks, users
 from app.api import settings as settings_router
 from app.api.payroll import employees_router
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.services.auth import create_superadmin, seed_permissions, seed_roles
+from app.services.task import seed_compliance_tasks
 
 
 @asynccontextmanager
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
             permissions_map = await seed_permissions(session)
             await seed_roles(session, permissions_map)
             await create_superadmin(session, settings.SUPERADMIN_EMAIL, settings.SUPERADMIN_PASSWORD)
+            await seed_compliance_tasks(session)
             await session.commit()
         except Exception:
             await session.rollback()
@@ -54,6 +56,7 @@ app.include_router(exports.router, prefix="/api/exports", tags=["exports"])
 app.include_router(automation.router, prefix="/api/automation", tags=["automation"])
 app.include_router(bank_reconciliation.router, prefix="/api", tags=["bank-reconciliation"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
+app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 
 
 @app.get("/health")

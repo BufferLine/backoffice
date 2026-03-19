@@ -17,6 +17,7 @@ from app.services import invoice as invoice_service
 from app.services import payroll as payroll_service
 from app.services.export import validate_month, generate_month_end_pack
 from app.services.file_storage import FileStorageService
+from app.services.task import generate_instances_for_month, get_overdue
 
 
 async def run_daily(db: AsyncSession) -> AutomationResult:
@@ -96,11 +97,24 @@ async def run_daily(db: AsyncSession) -> AutomationResult:
             "description": f"Payment {pmt.id} has no proof file",
         })
 
+    # 5. Overdue task instances
+    overdue_tasks = await get_overdue(db)
+    for task in overdue_tasks:
+        items.append({
+            "type": "overdue_task",
+            "entity_type": "task_instance",
+            "entity_id": str(task.id),
+            "title": task.title,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+            "description": f"Task '{task.title}' is overdue (due {task.due_date})",
+        })
+
     summary = {
         "overdue_invoices": len(overdue_invoices),
         "unpaid_payroll_runs": len(unpaid_payroll),
         "draft_expenses": len(draft_expenses),
         "payments_without_proof": len(payments_no_proof),
+        "overdue_tasks": len(overdue_tasks),
         "total_issues": len(items),
     }
 
@@ -419,6 +433,23 @@ async def run_monthly(
                 "description": f"Failed to generate export pack for {month_str}: {exc}",
             })
 
+    # 5. Generate task instances for the month
+    try:
+        generated_tasks = await generate_instances_for_month(db, month_str)
+        items.append({
+            "type": "task_instances_generated",
+            "month": month_str,
+            "count": len(generated_tasks),
+            "description": f"Generated {len(generated_tasks)} task instances for {month_str}",
+        })
+    except Exception as exc:
+        generated_tasks = []
+        items.append({
+            "type": "task_instances_error",
+            "error": str(exc),
+            "description": f"Failed to generate task instances for {month_str}: {exc}",
+        })
+
     summary = {
         "recurring_invoices_created": sum(1 for i in items if i["type"] == "recurring_invoice_created"),
         "recurring_invoice_errors": sum(1 for i in items if i["type"] == "recurring_invoice_error"),
@@ -427,6 +458,7 @@ async def run_monthly(
         "month_validation_complete": validation.is_complete,
         "export_attempted": export_result.get("attempted", False),
         "export_success": export_result.get("success", False),
+        "task_instances_generated": len(generated_tasks),
     }
 
     return AutomationResult(
