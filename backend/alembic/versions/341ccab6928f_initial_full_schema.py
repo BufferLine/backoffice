@@ -1,8 +1,8 @@
-"""initial schema
+"""initial full schema
 
-Revision ID: db4600c2fdb0
+Revision ID: 341ccab6928f
 Revises: 
-Create Date: 2026-03-19 14:25:07.866435
+Create Date: 2026-03-19 16:46:14.084189
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'db4600c2fdb0'
+revision: str = '341ccab6928f'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -57,6 +57,27 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email')
     )
+    op.create_table('accounts',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('account_type', sa.String(length=20), nullable=False),
+    sa.Column('currency', sa.String(length=10), nullable=False),
+    sa.Column('institution', sa.String(length=100), nullable=True),
+    sa.Column('account_number', sa.String(length=100), nullable=True),
+    sa.Column('wallet_address', sa.String(length=255), nullable=True),
+    sa.Column('chain_id', sa.String(length=50), nullable=True),
+    sa.Column('statement_source', sa.String(length=50), nullable=True),
+    sa.Column('opening_balance', sa.Numeric(precision=19, scale=6), nullable=False),
+    sa.Column('opening_balance_date', sa.Date(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('metadata_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('created_by', sa.UUID(), nullable=True),
+    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['currency'], ['currencies.code'], ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('api_tokens',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
@@ -83,6 +104,22 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['actor_id'], ['users.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('change_logs',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('entity_type', sa.String(length=50), nullable=False),
+    sa.Column('entity_id', sa.UUID(), nullable=False),
+    sa.Column('field_name', sa.String(length=100), nullable=False),
+    sa.Column('old_value', sa.Text(), nullable=True),
+    sa.Column('new_value', sa.Text(), nullable=True),
+    sa.Column('effective_date', sa.Date(), nullable=True),
+    sa.Column('reason', sa.String(length=255), nullable=True),
+    sa.Column('changed_by', sa.UUID(), nullable=True),
+    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['changed_by'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_change_logs_entity_id'), 'change_logs', ['entity_id'], unique=False)
+    op.create_index(op.f('ix_change_logs_entity_type'), 'change_logs', ['entity_type'], unique=False)
     op.create_table('clients',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('legal_name', sa.String(length=255), nullable=False),
@@ -149,12 +186,56 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['uploaded_by'], ['users.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('recurring_commitments',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('name', sa.String(length=255), nullable=False),
+    sa.Column('category', sa.String(length=50), nullable=False),
+    sa.Column('account_id', sa.UUID(), nullable=True),
+    sa.Column('currency', sa.String(length=10), nullable=False),
+    sa.Column('expected_amount', sa.Numeric(precision=19, scale=6), nullable=False),
+    sa.Column('frequency', sa.String(length=20), nullable=False),
+    sa.Column('day_of_period', sa.Integer(), nullable=True),
+    sa.Column('vendor', sa.String(length=255), nullable=True),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('next_due_date', sa.Date(), nullable=True),
+    sa.Column('last_transaction_id', sa.UUID(), nullable=True),
+    sa.Column('tolerance_percent', sa.Numeric(precision=5, scale=2), nullable=False),
+    sa.Column('metadata_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('created_by', sa.UUID(), nullable=True),
+    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['account_id'], ['accounts.id'], name='fk_recurring_commitments_account_id', ondelete='SET NULL', use_alter=True),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['currency'], ['currencies.code'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['last_transaction_id'], ['transactions.id'], name='fk_recurring_commitments_last_transaction_id', ondelete='SET NULL', use_alter=True),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('role_permissions',
     sa.Column('role_id', sa.UUID(), nullable=False),
     sa.Column('permission_id', sa.UUID(), nullable=False),
     sa.ForeignKeyConstraint(['permission_id'], ['permissions.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['role_id'], ['roles.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('role_id', 'permission_id')
+    )
+    op.create_table('task_templates',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('title', sa.String(length=255), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('category', sa.String(length=50), nullable=True),
+    sa.Column('jurisdiction', sa.String(length=20), nullable=True),
+    sa.Column('frequency', sa.String(length=20), nullable=False),
+    sa.Column('due_day', sa.Integer(), nullable=True),
+    sa.Column('due_month', sa.Integer(), nullable=True),
+    sa.Column('priority', sa.String(length=20), nullable=False),
+    sa.Column('is_system', sa.Boolean(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('auto_generate', sa.Boolean(), nullable=False),
+    sa.Column('metadata_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('created_by', sa.UUID(), nullable=True),
+    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('user_roles',
     sa.Column('user_id', sa.UUID(), nullable=False),
@@ -179,8 +260,13 @@ def upgrade() -> None:
     sa.Column('gst_rate', sa.Numeric(precision=5, scale=4), nullable=True),
     sa.Column('jurisdiction', sa.String(length=20), nullable=True),
     sa.Column('metadata_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('stamp_file_id', sa.UUID(), nullable=True),
+    sa.Column('primary_color', sa.String(length=7), nullable=True),
+    sa.Column('accent_color', sa.String(length=7), nullable=True),
+    sa.Column('font_family', sa.String(length=100), nullable=True),
     sa.ForeignKeyConstraint(['default_currency'], ['currencies.code'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['logo_file_id'], ['files.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['stamp_file_id'], ['files.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('export_packs',
@@ -216,6 +302,7 @@ def upgrade() -> None:
     sa.Column('wallet_address', sa.String(length=255), nullable=True),
     sa.Column('issued_pdf_file_id', sa.UUID(), nullable=True),
     sa.Column('recurring_rule_id', sa.UUID(), nullable=True),
+    sa.Column('tax_inclusive', sa.Boolean(), nullable=False),
     sa.Column('idempotency_key', sa.String(length=100), nullable=True),
     sa.Column('created_by', sa.UUID(), nullable=False),
     sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -224,7 +311,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['currency'], ['currencies.code'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['issued_pdf_file_id'], ['files.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['recurring_rule_id'], ['recurring_invoice_rules.id'], ondelete='SET NULL', use_alter=True),
+    sa.ForeignKeyConstraint(['recurring_rule_id'], ['recurring_invoice_rules.id'], name='fk_invoices_recurring_rule_id', ondelete='SET NULL', use_alter=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('idempotency_key', name='uq_invoices_idempotency_key'),
     sa.UniqueConstraint('invoice_number', name='uq_invoices_invoice_number')
@@ -271,8 +358,31 @@ def upgrade() -> None:
     sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['client_id'], ['clients.id'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['currency'], ['currencies.code'], ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['last_issued_invoice_id'], ['invoices.id'], ondelete='SET NULL', use_alter=True),
+    sa.ForeignKeyConstraint(['last_issued_invoice_id'], ['invoices.id'], name='fk_recurring_rules_last_invoice_id', ondelete='SET NULL', use_alter=True),
     sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('task_instances',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('template_id', sa.UUID(), nullable=True),
+    sa.Column('title', sa.String(length=255), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('category', sa.String(length=50), nullable=True),
+    sa.Column('priority', sa.String(length=20), nullable=False),
+    sa.Column('period', sa.String(length=20), nullable=True),
+    sa.Column('due_date', sa.Date(), nullable=True),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('completed_at', postgresql.TIMESTAMP(timezone=True), nullable=True),
+    sa.Column('completed_by', sa.UUID(), nullable=True),
+    sa.Column('notes', sa.Text(), nullable=True),
+    sa.Column('metadata_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('created_by', sa.UUID(), nullable=True),
+    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['completed_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['template_id'], ['task_templates.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('template_id', 'period', name='uq_task_instance_template_period')
     )
     op.create_table('bank_transactions',
     sa.Column('id', sa.UUID(), nullable=False),
@@ -291,6 +401,8 @@ def upgrade() -> None:
     sa.Column('statement_file_id', sa.UUID(), nullable=True),
     sa.Column('imported_at', postgresql.TIMESTAMP(), server_default=sa.text('now()'), nullable=False),
     sa.Column('imported_by', sa.UUID(), nullable=True),
+    sa.Column('account_id', sa.UUID(), nullable=True),
+    sa.ForeignKeyConstraint(['account_id'], ['accounts.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['currency'], ['currencies.code'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['imported_by'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['matched_payment_id'], ['payments.id'], ondelete='SET NULL'),
@@ -352,15 +464,52 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['payroll_run_id'], ['payroll_runs.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('transactions',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('account_id', sa.UUID(), nullable=False),
+    sa.Column('direction', sa.String(length=3), nullable=False),
+    sa.Column('amount', sa.Numeric(precision=19, scale=6), nullable=False),
+    sa.Column('currency', sa.String(length=10), nullable=False),
+    sa.Column('tx_date', sa.Date(), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('category', sa.String(length=50), nullable=False),
+    sa.Column('counterparty', sa.String(length=255), nullable=True),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('reference', sa.String(length=255), nullable=True),
+    sa.Column('payment_id', sa.UUID(), nullable=True),
+    sa.Column('bank_transaction_id', sa.UUID(), nullable=True),
+    sa.Column('recurring_commitment_id', sa.UUID(), nullable=True),
+    sa.Column('fx_rate_to_sgd', sa.Numeric(precision=19, scale=10), nullable=True),
+    sa.Column('sgd_value', sa.Numeric(precision=19, scale=6), nullable=True),
+    sa.Column('notes', sa.Text(), nullable=True),
+    sa.Column('metadata_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('confirmed_at', postgresql.TIMESTAMP(timezone=True), nullable=True),
+    sa.Column('created_by', sa.UUID(), nullable=True),
+    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['account_id'], ['accounts.id'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['bank_transaction_id'], ['bank_transactions.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['currency'], ['currencies.code'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['payment_id'], ['payments.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['recurring_commitment_id'], ['recurring_commitments.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('uq_transactions_bank_transaction_id', 'transactions', ['bank_transaction_id'], unique=True, postgresql_where=sa.text('bank_transaction_id IS NOT NULL'))
+    op.create_index('uq_transactions_payment_id', 'transactions', ['payment_id'], unique=True, postgresql_where=sa.text('payment_id IS NOT NULL'))
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index('uq_transactions_payment_id', table_name='transactions', postgresql_where=sa.text('payment_id IS NOT NULL'))
+    op.drop_index('uq_transactions_bank_transaction_id', table_name='transactions', postgresql_where=sa.text('bank_transaction_id IS NOT NULL'))
+    op.drop_table('transactions')
     op.drop_table('payroll_deductions')
     op.drop_table('payroll_runs')
     op.drop_table('invoice_line_items')
     op.drop_table('bank_transactions')
+    op.drop_table('task_instances')
     op.drop_table('recurring_invoice_rules')
     op.drop_index('uq_payments_tx_hash_not_null', table_name='payments', postgresql_where='tx_hash IS NOT NULL')
     op.drop_table('payments')
@@ -368,13 +517,19 @@ def downgrade() -> None:
     op.drop_table('export_packs')
     op.drop_table('company_settings')
     op.drop_table('user_roles')
+    op.drop_table('task_templates')
     op.drop_table('role_permissions')
+    op.drop_table('recurring_commitments')
     op.drop_table('files')
     op.drop_table('expenses')
     op.drop_table('employees')
     op.drop_table('clients')
+    op.drop_index(op.f('ix_change_logs_entity_type'), table_name='change_logs')
+    op.drop_index(op.f('ix_change_logs_entity_id'), table_name='change_logs')
+    op.drop_table('change_logs')
     op.drop_table('audit_logs')
     op.drop_table('api_tokens')
+    op.drop_table('accounts')
     op.drop_table('users')
     op.drop_table('roles')
     op.drop_table('permissions')

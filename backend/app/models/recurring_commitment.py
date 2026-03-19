@@ -16,7 +16,7 @@ class RecurringCommitment(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     account_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL", use_alter=True, name="fk_recurring_commitments_account_id"), nullable=True
     )
     currency: Mapped[str] = mapped_column(
         String(10), ForeignKey("currencies.code", ondelete="RESTRICT"), nullable=False
@@ -29,7 +29,7 @@ class RecurringCommitment(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     next_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_transaction_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("transactions.id", ondelete="SET NULL", use_alter=True, name="fk_recurring_commitments_last_transaction_id"), nullable=True
     )
     tolerance_percent: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=10.00)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

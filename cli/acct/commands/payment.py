@@ -25,19 +25,19 @@ def record(
     entity_type, _, entity_id = entity.partition(":")
     payload: dict = {
         "payment_type": type,
-        "entity_type": entity_type,
-        "entity_id": entity_id,
+        "related_entity_type": entity_type,
+        "related_entity_id": entity_id,
         "amount": amount,
         "currency": currency,
     }
     if tx_hash:
         payload["tx_hash"] = tx_hash
     if chain:
-        payload["chain"] = chain
+        payload["chain_id"] = chain
     if date:
-        payload["date"] = date
+        payload["payment_date"] = date
     if reference:
-        payload["reference"] = reference
+        payload["bank_reference"] = reference
     data = api_post("/api/payments", json_data=payload)
     print_success(f"Payment recorded: {data['id']}")
     print_json(data)
@@ -62,10 +62,10 @@ def list_payments(
             [
                 p.get("id", ""),
                 p.get("payment_type", ""),
-                f"{p.get('entity_type', '')}:{p.get('entity_id', '')}",
+                f"{p.get('related_entity_type', '')}:{p.get('related_entity_id', '')}",
                 p.get("amount", ""),
                 p.get("currency", ""),
-                p.get("date", ""),
+                p.get("payment_date", ""),
             ]
             for p in items
         ],

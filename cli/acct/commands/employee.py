@@ -21,10 +21,11 @@ def add(
         "/api/employees",
         json_data={
             "name": name,
-            "salary": salary,
-            "currency": currency,
+            "base_salary": str(salary),
+            "salary_currency": currency,
             "start_date": start_date,
-            "pass_type": pass_type,
+            "work_pass_type": pass_type,
+            "tax_residency": "SG",
         },
     )
     print_success(f"Employee added: {data['id']}")
@@ -38,16 +39,16 @@ def list_employees() -> None:
     items = data if isinstance(data, list) else data.get("items", [])
     print_table(
         "Employees",
-        ["ID", "Name", "Salary", "Currency", "Pass Type", "Start Date", "Active"],
+        ["ID", "Name", "Salary", "Currency", "Pass Type", "Start Date", "Status"],
         [
             [
-                emp.get("id", ""),
+                emp.get("id", "")[:8],
                 emp.get("name", ""),
-                emp.get("salary", ""),
-                emp.get("currency", ""),
-                emp.get("pass_type", ""),
+                emp.get("base_salary", ""),
+                emp.get("salary_currency", ""),
+                emp.get("work_pass_type", ""),
                 emp.get("start_date", ""),
-                emp.get("is_active", ""),
+                emp.get("status", ""),
             ]
             for emp in items
         ],

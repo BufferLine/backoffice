@@ -78,8 +78,9 @@ async def create_payroll_run(
     if employee.status != "active":
         raise ValueError(f"Employee {employee_id} is not active")
 
-    # Parse month → first and last day
-    year, month_num = map(int, month_str.split("-"))
+    # Parse month → first and last day (accepts YYYY-MM or YYYY-MM-DD)
+    parts = month_str.split("-")
+    year, month_num = int(parts[0]), int(parts[1])
     days_in_month = calendar.monthrange(year, month_num)[1]
     first_day = date(year, month_num, 1)
     last_day = date(year, month_num, days_in_month)

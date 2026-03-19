@@ -18,9 +18,9 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Superadmin bootstrap
-    SUPERADMIN_EMAIL: str = "admin@example.com"
-    SUPERADMIN_PASSWORD: str = "change-me-in-production"
+    # Superadmin bootstrap (legacy, optional - system now uses onboarding flow)
+    SUPERADMIN_EMAIL: str | None = None
+    SUPERADMIN_PASSWORD: str | None = None
 
     # File uploads
     FILE_MAX_SIZE_BYTES: int = 10485760  # 10 MB

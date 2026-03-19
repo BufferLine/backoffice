@@ -14,7 +14,7 @@ currency_app = typer.Typer(help="Currency management commands")
 @app.command()
 def show() -> None:
     """Show current system settings."""
-    data = api_get("/api/settings")
+    data = api_get("/api/settings/company")
     print_json(data)
 
 
@@ -25,19 +25,16 @@ def update(
     default_currency: Optional[str] = typer.Option(
         None, "--default-currency", help="Default currency code"
     ),
-    timezone: Optional[str] = typer.Option(None, "--timezone", help="Timezone (e.g. Asia/Singapore)"),
 ) -> None:
     """Update system settings."""
     payload: dict = {}
     if company_name is not None:
-        payload["company_name"] = company_name
+        payload["legal_name"] = company_name
     if uen is not None:
         payload["uen"] = uen
     if default_currency is not None:
         payload["default_currency"] = default_currency
-    if timezone is not None:
-        payload["timezone"] = timezone
-    data = api_patch("/api/settings", json_data=payload)
+    data = api_patch("/api/settings/company", json_data=payload)
     print_success("Settings updated")
     print_json(data)
 
@@ -69,8 +66,8 @@ def currency_add(
 ) -> None:
     """Add a new supported currency."""
     data = api_post(
-        "/api/currencies",
-        json_data={"code": code, "name": name, "symbol": symbol, "precision": precision},
+        "/api/settings/currencies",
+        json_data={"code": code, "name": name, "symbol": symbol, "display_precision": precision},
     )
     print_success(f"Currency added: {code}")
     print_json(data)
@@ -79,7 +76,7 @@ def currency_add(
 @currency_app.command(name="list")
 def currency_list() -> None:
     """List all supported currencies."""
-    data = api_get("/api/currencies")
+    data = api_get("/api/settings/currencies")
     items = data if isinstance(data, list) else data.get("items", [])
     print_table(
         "Currencies",
@@ -89,7 +86,7 @@ def currency_list() -> None:
                 c.get("code", ""),
                 c.get("name", ""),
                 c.get("symbol", ""),
-                c.get("precision", ""),
+                c.get("display_precision", ""),
             ]
             for c in items
         ],

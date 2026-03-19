@@ -22,12 +22,12 @@ def add(
     data = api_post(
         "/api/expenses",
         json_data={
-            "date": date,
+            "expense_date": date,
             "vendor": vendor,
             "category": category,
             "amount": amount,
             "currency": currency,
-            "description": description,
+            "notes": description or None,
         },
     )
     print_success(f"Expense added: {data['id']}")
@@ -77,7 +77,7 @@ def list_expenses(
         [
             [
                 exp.get("id", ""),
-                exp.get("date", ""),
+                exp.get("expense_date", ""),
                 exp.get("vendor", ""),
                 exp.get("category", ""),
                 exp.get("amount", ""),

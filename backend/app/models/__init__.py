@@ -17,3 +17,4 @@ from app.models.changelog import ChangeLog  # noqa: F401
 from app.models.account import Account  # noqa: F401
 from app.models.transaction import Transaction  # noqa: F401
 from app.models.recurring_commitment import RecurringCommitment  # noqa: F401
+from app.models.setup import SetupToken  # noqa: F401

@@ -18,8 +18,8 @@ def statement_upload(
     with open(filepath, "rb") as f:
         files = {"file": (filepath.name, f, "application/octet-stream")}
         data = api_post(
-            "/api/bank/statements",
-            files={**files, "source": (None, source)},
+            f"/api/bank-statements/upload?source={source}",
+            files=files,
         )
     print_success(f"Bank statement uploaded: {data.get('id', '')}")
     print_json(data)
@@ -34,21 +34,21 @@ def tx_list(
     """List bank transactions."""
     params: dict = {}
     if status:
-        params["status"] = status
-    data = api_get("/api/bank/transactions", params=params)
+        params["match_status"] = status
+    data = api_get("/api/bank-transactions", params=params)
     items = data if isinstance(data, list) else data.get("items", [])
     print_table(
         "Bank Transactions",
-        ["ID", "Date", "Description", "Amount", "Currency", "Status", "Payment ID"],
+        ["ID", "Date", "Description", "Amount", "Currency", "Match Status", "Payment ID"],
         [
             [
                 tx.get("id", ""),
-                tx.get("date", ""),
+                tx.get("tx_date", ""),
                 tx.get("description", ""),
                 tx.get("amount", ""),
                 tx.get("currency", ""),
-                tx.get("status", ""),
-                tx.get("payment_id", ""),
+                tx.get("match_status", ""),
+                tx.get("matched_payment_id", ""),
             ]
             for tx in items
         ],
@@ -62,7 +62,7 @@ def tx_match(
 ) -> None:
     """Manually match a bank transaction to a payment."""
     data = api_post(
-        f"/api/bank/transactions/{tx_id}/match",
+        f"/api/bank-transactions/{tx_id}/match",
         json_data={"payment_id": payment_id},
     )
     print_success(f"Transaction {tx_id} matched to payment {payment_id}")
@@ -72,7 +72,7 @@ def tx_match(
 @app.command()
 def tx_auto_match() -> None:
     """Auto-match unmatched bank transactions to payments."""
-    data = api_post("/api/bank/transactions/auto-match")
+    data = api_post("/api/bank-transactions/auto-match")
     matched = data.get("matched", 0)
     print_success(f"Auto-matched {matched} transactions")
     print_json(data)
@@ -83,6 +83,6 @@ def tx_ignore(
     tx_id: str = typer.Argument(..., help="Bank transaction ID to ignore"),
 ) -> None:
     """Mark a bank transaction as ignored (no matching needed)."""
-    data = api_post(f"/api/bank/transactions/{tx_id}/ignore")
+    data = api_post(f"/api/bank-transactions/{tx_id}/ignore")
     print_success(f"Transaction {tx_id} marked as ignored")
     print_json(data)

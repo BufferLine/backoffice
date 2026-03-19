@@ -17,10 +17,10 @@ def run(
     ),
 ) -> None:
     """Create a payroll run for an employee."""
-    payload: dict = {"employee_id": employee, "month": month}
+    payload: dict = {"employee_id": employee, "month": f"{month}-01"}
     if start_date:
         payload["start_date"] = start_date
-    data = api_post("/api/payroll", json_data=payload)
+    data = api_post("/api/payroll/runs", json_data=payload)
     print_success(f"Payroll run created: {data['id']}")
     print_json(data)
 
@@ -30,8 +30,8 @@ def review(
     payroll_id: str = typer.Argument(..., help="Payroll run ID"),
 ) -> None:
     """Review a payroll run."""
-    data = api_post(f"/api/payroll/{payroll_id}/review")
-    print_success(f"Payroll run {payroll_id} marked as reviewed")
+    data = api_post(f"/api/payroll/runs/{payroll_id}/review")
+    print_success(f"Payroll run reviewed")
     print_json(data)
 
 
@@ -40,8 +40,8 @@ def finalize(
     payroll_id: str = typer.Argument(..., help="Payroll run ID"),
 ) -> None:
     """Finalize a payroll run."""
-    data = api_post(f"/api/payroll/{payroll_id}/finalize")
-    print_success(f"Payroll run {payroll_id} finalized")
+    data = api_post(f"/api/payroll/runs/{payroll_id}/finalize")
+    print_success(f"Payroll run finalized")
     print_json(data)
 
 
@@ -52,10 +52,10 @@ def mark_paid(
 ) -> None:
     """Mark a payroll run as paid."""
     data = api_post(
-        f"/api/payroll/{payroll_id}/mark-paid",
+        f"/api/payroll/runs/{payroll_id}/mark-paid",
         json_data={"payment_id": payment_id},
     )
-    print_success(f"Payroll run {payroll_id} marked as paid")
+    print_success(f"Payroll run marked as paid")
     print_json(data)
 
 
@@ -67,21 +67,22 @@ def list_payroll(
     params: dict = {}
     if month:
         params["month"] = month
-    data = api_get("/api/payroll", params=params)
+    data = api_get("/api/payroll/runs", params=params)
     items = data if isinstance(data, list) else data.get("items", [])
     print_table(
         "Payroll Runs",
-        ["ID", "Employee", "Month", "Gross", "Net", "Status"],
+        ["ID", "Employee", "Month", "Prorated", "Deductions", "Net", "Status"],
         [
             [
-                run.get("id", ""),
-                run.get("employee_id", ""),
-                run.get("month", ""),
-                run.get("gross_pay", ""),
-                run.get("net_pay", ""),
-                run.get("status", ""),
+                r.get("id", "")[:8],
+                r.get("employee_id", "")[:8],
+                r.get("month", ""),
+                r.get("prorated_gross_salary", ""),
+                r.get("total_deductions", ""),
+                r.get("net_salary", ""),
+                r.get("status", ""),
             ]
-            for run in items
+            for r in items
         ],
     )
 
@@ -91,5 +92,5 @@ def show(
     payroll_id: str = typer.Argument(..., help="Payroll run ID"),
 ) -> None:
     """Show payroll run details."""
-    data = api_get(f"/api/payroll/{payroll_id}")
+    data = api_get(f"/api/payroll/runs/{payroll_id}")
     print_json(data)

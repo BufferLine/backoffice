@@ -27,7 +27,7 @@ class RecurringInvoiceRule(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     next_issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_issued_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL", use_alter=True), nullable=True
+        UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL", use_alter=True, name="fk_recurring_rules_last_invoice_id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
@@ -65,7 +65,7 @@ class Invoice(Base):
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
     )
     recurring_rule_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("recurring_invoice_rules.id", ondelete="SET NULL", use_alter=True), nullable=True
+        UUID(as_uuid=True), ForeignKey("recurring_invoice_rules.id", ondelete="SET NULL", use_alter=True, name="fk_invoices_recurring_rule_id"), nullable=True
     )
     tax_inclusive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
