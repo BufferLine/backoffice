@@ -47,6 +47,7 @@ async def create_invoice(
         created_by=current_user.id,
         tax_inclusive=body.tax_inclusive,
         payment_method_id=body.payment_method_id,
+        payment_method_ids=body.payment_method_ids,
     )
     return InvoiceResponse.model_validate(invoice)
 
@@ -131,6 +132,8 @@ async def add_line_item(
             description=body.description,
             quantity=body.quantity,
             unit_price=body.unit_price,
+            tax_code=body.tax_code,
+            tax_rate=body.tax_rate,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
@@ -158,6 +161,8 @@ async def update_line_item(
             description=body.description,
             quantity=body.quantity,
             unit_price=body.unit_price,
+            tax_code=body.tax_code,
+            tax_rate=body.tax_rate,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

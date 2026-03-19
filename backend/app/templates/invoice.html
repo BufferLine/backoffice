@@ -57,9 +57,18 @@
     }
     .payment-info p { font-size: 9pt; line-height: 1.8; color: #333; }
     .payment-info strong { color: #1a1a2e; }
+    .payment-option { margin-bottom: 12pt; padding-bottom: 12pt; border-bottom: 0.5pt solid #f0f0f0; }
+    .payment-option:last-child { border-bottom: none; margin-bottom: 0; }
+    .payment-option h4 { font-size: 9pt; font-weight: 600; color: {{ theme.accent_color }}; margin-bottom: 4pt; }
+    .tax-code-badge {
+      display: inline-block; font-size: 7.5pt; font-weight: 600;
+      padding: 1pt 4pt; border-radius: 2pt;
+      background: #f0f4ff; color: #3b5bdb; border: 0.5pt solid #c5d0e6;
+    }
     .footer {
-      margin-top: 40pt; padding-top: 10pt; border-top: 0.5pt solid #e0e0e0;
+      margin-top: 20pt; padding-top: 10pt; border-top: 0.5pt solid #e0e0e0;
       text-align: center; font-size: 8pt; color: #aaa;
+      page-break-before: avoid;
     }
   </style>
 </head>
@@ -75,7 +84,9 @@
       <p>
         {% if company.address %}{{ company.address }}<br/>{% endif %}
         {% if company.uen %}UEN: {{ company.uen }}<br/>{% endif %}
-        {% if company.email %}{{ company.email }}{% endif %}
+        {% if company.gst_registration_number %}GST Reg No: {{ company.gst_registration_number }}<br/>{% endif %}
+        {% if company.billing_email %}{{ company.billing_email }}<br/>{% endif %}
+        {% if company.website %}<a href="{{ company.website }}" style="color:#555; text-decoration:none;">{{ company.website }}</a>{% endif %}
       </p>
     </div>
     <div class="doc-title">
@@ -115,10 +126,13 @@
   <table>
     <thead>
       <tr>
-        <th style="width:50%">Description</th>
-        <th class="right" style="width:12%">Qty</th>
-        <th class="right" style="width:18%">Unit Price</th>
-        <th class="right" style="width:20%">Amount</th>
+        <th style="width:{% if has_mixed_tax_codes %}42%{% else %}50%{% endif %}">Description</th>
+        <th class="right" style="width:10%">Qty</th>
+        <th class="right" style="width:16%">Unit Price</th>
+        {% if has_mixed_tax_codes %}
+        <th class="right" style="width:8%">Tax</th>
+        {% endif %}
+        <th class="right" style="width:{% if has_mixed_tax_codes %}24%{% else %}20%{% endif %}">Amount</th>
       </tr>
     </thead>
     <tbody>
@@ -127,6 +141,9 @@
         <td>{{ item.description }}</td>
         <td class="right">{{ item.quantity | int if item.quantity == item.quantity | int else item.quantity }}</td>
         <td class="right">{{ invoice.currency }} {{ item.unit_price|money }}</td>
+        {% if has_mixed_tax_codes %}
+        <td class="right"><span class="tax-code-badge">{{ item.tax_code }}</span></td>
+        {% endif %}
         <td class="right">{{ invoice.currency }} {{ item.amount|money }}</td>
       </tr>
       {% endfor %}
@@ -170,35 +187,104 @@
     </table>
   </div>
 
+  {% if has_mixed_tax_codes %}
+  <!-- ── GST Breakdown by Tax Code ────────────────────────── -->
+  <div class="section">
+    <h3>GST Breakdown</h3>
+    <table style="width:auto; min-width:260pt; margin-left:auto;">
+      <thead>
+        <tr>
+          <th style="width:80pt">Tax Code</th>
+          <th class="right" style="width:100pt">Taxable Amount</th>
+          <th class="right" style="width:100pt">GST</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(sr_base=0, sr_tax=0, zr_base=0, es_base=0, nt_base=0) %}
+        {% for item in line_items %}
+          {% if item.tax_code == "SR" %}
+            {% set ns.sr_base = ns.sr_base + item.amount %}
+            {% set ns.sr_tax = ns.sr_tax + item.tax_amount %}
+          {% elif item.tax_code == "ZR" %}
+            {% set ns.zr_base = ns.zr_base + item.amount %}
+          {% elif item.tax_code == "ES" %}
+            {% set ns.es_base = ns.es_base + item.amount %}
+          {% elif item.tax_code == "NT" %}
+            {% set ns.nt_base = ns.nt_base + item.amount %}
+          {% endif %}
+        {% endfor %}
+        {% if ns.sr_base %}
+        <tr>
+          <td><span class="tax-code-badge">SR</span> Standard-Rated</td>
+          <td class="right">{{ invoice.currency }} {{ ns.sr_base|money }}</td>
+          <td class="right">{{ invoice.currency }} {{ ns.sr_tax|money }}</td>
+        </tr>
+        {% endif %}
+        {% if ns.zr_base %}
+        <tr>
+          <td><span class="tax-code-badge">ZR</span> Zero-Rated</td>
+          <td class="right">{{ invoice.currency }} {{ ns.zr_base|money }}</td>
+          <td class="right">{{ invoice.currency }} 0.00</td>
+        </tr>
+        {% endif %}
+        {% if ns.es_base %}
+        <tr>
+          <td><span class="tax-code-badge">ES</span> Exempt</td>
+          <td class="right">{{ invoice.currency }} {{ ns.es_base|money }}</td>
+          <td class="right">{{ invoice.currency }} 0.00</td>
+        </tr>
+        {% endif %}
+        {% if ns.nt_base %}
+        <tr>
+          <td><span class="tax-code-badge">NT</span> Not Taxable</td>
+          <td class="right">{{ invoice.currency }} {{ ns.nt_base|money }}</td>
+          <td class="right">{{ invoice.currency }} 0.00</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   <!-- ── Payment Details ──────────────────────────────────── -->
   <div class="section">
     <h3>Payment Details</h3>
     <div class="payment-info">
-      {% if payment_details %}
-        {% if payment_details.nickname %}
-          <p style="font-size:8.5pt; color:#888; margin-bottom:4pt;">{{ payment_details.nickname }}</p>
-        {% endif %}
-        {% if payment_details.type == "crypto" %}
-          <p>
-            <strong>Payment:</strong> USDC/USDT{% if payment_details.chain_id %} ({{ payment_details.chain_id }}){% endif %}<br/>
-            {% if payment_details.account_name %}<strong>Account Name:</strong> {{ payment_details.account_name }}<br/>{% endif %}
-            <strong>Wallet Address:</strong><br/>
-            <code style="font-size:9pt; word-break:break-all;">{{ payment_details.wallet_address }}</code>
-          </p>
-        {% elif payment_details.type == "paynow" %}
-          <p>
-            <strong>PayNow UEN:</strong> {{ payment_details.uen_number }}<br/>
-            <strong>Account Name:</strong> {{ payment_details.account_name }}
-          </p>
-        {% else %}
-          <p>
-            <strong>Bank:</strong> {{ payment_details.bank_name }}<br/>
-            <strong>Account Name:</strong> {{ payment_details.account_name }}<br/>
-            <strong>Account Number:</strong> {{ payment_details.account_number }}<br/>
-            {% if payment_details.swift %}<strong>SWIFT:</strong> {{ payment_details.swift }}<br/>{% endif %}
-            {% if payment_details.reference %}<strong>Reference:</strong> {{ payment_details.reference }}{% endif %}
-          </p>
-        {% endif %}
+      {% if payment_methods %}
+        {% for pm in payment_methods %}
+        <div class="payment-option">
+          {% if payment_methods|length > 1 %}
+          <h4>Payment Option {{ loop.index }}{% if pm.nickname %} — {{ pm.nickname }}{% endif %}</h4>
+          {% elif pm.nickname %}
+          <p style="font-size:8.5pt; color:#888; margin-bottom:4pt;">{{ pm.nickname }}</p>
+          {% endif %}
+          {% if pm.type == "crypto" %}
+            <p>
+              <strong>Payment:</strong> USDC/USDT{% if pm.chain_id %} ({{ pm.chain_id }}){% endif %}<br/>
+              {% if pm.account_name %}<strong>Account Name:</strong> {{ pm.account_name }}<br/>{% endif %}
+              <strong>Wallet Address:</strong><br/>
+              <code style="font-size:9pt; word-break:break-all;">{{ pm.wallet_address }}</code>
+            </p>
+          {% elif pm.type == "paynow" %}
+            <div>
+              <strong>PayNow UEN:</strong> {{ pm.uen_number }}<br/>
+              <strong>Account Name:</strong> {{ pm.account_name }}
+              {% if paynow_qr_uri and loop.first %}
+              <br/><img src="{{ paynow_qr_uri }}" alt="PayNow QR" style="max-width:120px; margin-top:8pt; display:block;" />
+              <p style="font-size:7pt; color:#888;">Scan to pay via PayNow</p>
+              {% endif %}
+            </div>
+          {% else %}
+            <p>
+              <strong>Bank:</strong> {{ pm.bank_name }}<br/>
+              <strong>Account Name:</strong> {{ pm.account_name }}<br/>
+              <strong>Account Number:</strong> {{ pm.account_number }}<br/>
+              {% if pm.swift %}<strong>SWIFT:</strong> {{ pm.swift }}<br/>{% endif %}
+              {% if pm.reference %}<strong>Reference:</strong> {{ pm.reference }}{% endif %}
+            </p>
+          {% endif %}
+        </div>
+        {% endfor %}
       {% elif invoice.payment_method == "crypto" and invoice.wallet_address %}
         <p>
           <strong>Payment:</strong> USDC/USDT<br/>
@@ -221,8 +307,8 @@
 
   {% if stamp_uri %}
   <!-- ── Company Stamp ──────────────────────────────────────── -->
-  <div style="margin-top:30px; text-align:right;">
-    <img src="{{ stamp_uri }}" alt="Company Stamp" style="max-width:150px; max-height:150px; opacity:0.85;" />
+  <div style="margin-top:16pt; text-align:right; page-break-inside:avoid;">
+    <img src="{{ stamp_uri }}" alt="Company Stamp" style="max-width:100px; max-height:100px; opacity:0.85;" />
     <p style="font-size:8pt; color:#666; margin-top:4px;">Authorized Signatory</p>
   </div>
   {% endif %}
@@ -230,7 +316,9 @@
   <!-- ── Footer ───────────────────────────────────────────── -->
   <div class="footer">
     {{ company.legal_name }}{% if company.uen %} &middot; UEN {{ company.uen }}{% endif %}
+    {% if company.gst_registration_number %} &middot; GST Reg No {{ company.gst_registration_number }}{% endif %}
     {% if company.address %} &middot; {{ company.address }}{% endif %}
+    {% if company.website %} &middot; {{ company.website }}{% endif %}
   </div>
 
 </body>

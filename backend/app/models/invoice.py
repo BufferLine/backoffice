@@ -1,12 +1,21 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Numeric, String, Table, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
+
+
+invoice_payment_methods = Table(
+    "invoice_payment_methods",
+    Base.metadata,
+    Column("invoice_id", UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="CASCADE"), primary_key=True),
+    Column("payment_method_id", UUID(as_uuid=True), ForeignKey("payment_methods.id", ondelete="CASCADE"), primary_key=True),
+    Column("sort_order", Integer, default=0),
+)
 
 
 class RecurringInvoiceRule(Base):
@@ -90,6 +99,13 @@ class Invoice(Base):
     line_items: Mapped[list["InvoiceLineItem"]] = relationship(
         "InvoiceLineItem", back_populates="invoice", cascade="all, delete-orphan"
     )
+    payment_methods = relationship(
+        "PaymentMethod", secondary=invoice_payment_methods, order_by=invoice_payment_methods.c.sort_order
+    )
+
+    @property
+    def payment_method_ids(self) -> list[uuid.UUID]:
+        return [pm.id for pm in (self.payment_methods or [])]
 
 
 class InvoiceLineItem(Base):
@@ -104,5 +120,8 @@ class InvoiceLineItem(Base):
     unit_price: Mapped[float] = mapped_column(Numeric(19, 6), nullable=False, default=0)
     amount: Mapped[float] = mapped_column(Numeric(19, 6), nullable=False, default=0)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_code: Mapped[str] = mapped_column(String(10), nullable=False, default="SR")
+    tax_rate: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
+    tax_amount: Mapped[float] = mapped_column(Numeric(19, 6), nullable=False, default=0)
 
     invoice: Mapped["Invoice"] = relationship("Invoice", back_populates="line_items")

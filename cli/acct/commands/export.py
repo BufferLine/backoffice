@@ -14,7 +14,7 @@ def validate(
     month: str = typer.Option(..., "--month", help="Month to validate (YYYY-MM)"),
 ) -> None:
     """Validate data completeness before month-end export."""
-    data = api_post("/api/exports/validate", json_data={"month": month})
+    data = api_post(f"/api/exports/validate/{month}")
     print_json(data)
 
 

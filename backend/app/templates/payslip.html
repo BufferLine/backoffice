@@ -57,8 +57,9 @@
     .payment-info p { font-size: 9pt; line-height: 1.8; color: #333; }
     .payment-info strong { color: #1a1a2e; }
     .footer {
-      margin-top: 40pt; padding-top: 10pt; border-top: 0.5pt solid #e0e0e0;
+      margin-top: 20pt; padding-top: 10pt; border-top: 0.5pt solid #e0e0e0;
       text-align: center; font-size: 8pt; color: #aaa;
+      page-break-before: avoid;
     }
   </style>
 </head>
@@ -183,8 +184,8 @@
 
   {% if stamp_uri %}
   <!-- ── Company Stamp ──────────────────────────────────────── -->
-  <div style="margin-top:30px; text-align:right;">
-    <img src="{{ stamp_uri }}" alt="Company Stamp" style="max-width:150px; max-height:150px; opacity:0.85;" />
+  <div style="margin-top:16pt; text-align:right; page-break-inside:avoid;">
+    <img src="{{ stamp_uri }}" alt="Company Stamp" style="max-width:100px; max-height:100px; opacity:0.85;" />
     <p style="font-size:8pt; color:#666; margin-top:4px;">Authorized Signatory</p>
   </div>
   {% endif %}

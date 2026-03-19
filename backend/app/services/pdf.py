@@ -45,6 +45,27 @@ def _encode_image(image_bytes: Optional[bytes], mime_type: str = "image/png") ->
 _encode_stamp = _encode_image
 
 
+def _generate_paynow_qr(uen: str, amount: Decimal, reference: str = "") -> Optional[str]:
+    """Generate PayNow QR code as base64 data URI."""
+    try:
+        import qrcode
+        from io import BytesIO
+
+        # SGQR PayNow format (simplified)
+        # Format: UEN + amount for basic PayNow transfer
+        payload = f"https://www.paynow.sg/pay?uen={uen}&amount={amount}"
+        if reference:
+            payload += f"&ref={reference}"
+
+        qr = qrcode.make(payload, box_size=4, border=2)
+        buffer = BytesIO()
+        qr.save(buffer, format="PNG")
+        b64 = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:image/png;base64,{b64}"
+    except ImportError:
+        return None
+
+
 def render_invoice_pdf(
     data: dict[str, Any],
     stamp_bytes: Optional[bytes] = None,

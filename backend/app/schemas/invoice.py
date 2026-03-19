@@ -49,12 +49,16 @@ class LineItemCreate(BaseModel):
     description: str
     quantity: Decimal
     unit_price: Decimal
+    tax_code: str = "SR"
+    tax_rate: Optional[Decimal] = None
 
 
 class LineItemUpdate(BaseModel):
     description: Optional[str] = None
     quantity: Optional[Decimal] = None
     unit_price: Optional[Decimal] = None
+    tax_code: Optional[str] = None
+    tax_rate: Optional[Decimal] = None
 
 
 class LineItemResponse(BaseModel):
@@ -65,6 +69,9 @@ class LineItemResponse(BaseModel):
     unit_price: Decimal
     amount: Decimal
     sort_order: int
+    tax_code: str
+    tax_rate: Optional[Decimal]
+    tax_amount: Decimal
 
     model_config = {"from_attributes": True}
 
@@ -78,6 +85,7 @@ class InvoiceCreate(BaseModel):
     wallet_address: Optional[str] = None
     tax_inclusive: bool = False
     payment_method_id: Optional[UUID] = None
+    payment_method_ids: Optional[list[UUID]] = None
 
 
 class InvoiceUpdate(BaseModel):
@@ -106,6 +114,7 @@ class InvoiceResponse(BaseModel):
     payment_method: Optional[str]
     wallet_address: Optional[str]
     payment_method_id: Optional[UUID]
+    payment_method_ids: list[UUID] = []
     line_items: list[LineItemResponse] = []
     created_at: datetime
     updated_at: datetime

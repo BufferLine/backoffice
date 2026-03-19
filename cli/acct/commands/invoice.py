@@ -14,12 +14,15 @@ def create(
     client: str = typer.Option(..., "--client", help="Client ID"),
     currency: str = typer.Option("SGD", "--currency", help="Invoice currency code"),
     description: str = typer.Option("", "--description", help="Invoice description"),
-    payment_method: Optional[str] = typer.Option(None, "--payment-method", help="Payment method ID"),
+    payment_method: Optional[list[str]] = typer.Option(None, "--payment-method", help="Payment method ID (repeatable for multiple)"),
 ) -> None:
     """Create a new draft invoice."""
     payload: dict = {"client_id": client, "currency": currency, "description": description}
-    if payment_method is not None:
-        payload["payment_method_id"] = payment_method
+    if payment_method:
+        if len(payment_method) == 1:
+            payload["payment_method_id"] = payment_method[0]
+        else:
+            payload["payment_method_ids"] = payment_method
     data = api_post(
         "/api/invoices",
         json_data=payload,
@@ -51,11 +54,16 @@ def add_item(
     desc: str = typer.Option(..., "--desc", help="Line item description"),
     qty: float = typer.Option(..., "--qty", help="Quantity"),
     price: float = typer.Option(..., "--price", help="Unit price"),
+    tax_code: str = typer.Option("SR", "--tax-code", help="Tax code: SR=Standard Rate, ZR=Zero-Rated, ES=Exempt, NT=Not Taxable"),
+    tax_rate: Optional[float] = typer.Option(None, "--tax-rate", help="Override tax rate (e.g. 0.09 for 9%)"),
 ) -> None:
     """Add a line item to an invoice."""
+    payload: dict = {"description": desc, "quantity": qty, "unit_price": price, "tax_code": tax_code}
+    if tax_rate is not None:
+        payload["tax_rate"] = tax_rate
     data = api_post(
         f"/api/invoices/{invoice_id}/line-items",
-        json_data={"description": desc, "quantity": qty, "unit_price": price},
+        json_data=payload,
     )
     print_success(f"Item added to invoice {invoice_id}")
     print_json(data)

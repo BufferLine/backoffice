@@ -17,7 +17,8 @@ from app.services import invoice as invoice_service
 from app.services import payroll as payroll_service
 from app.services.export import validate_month, generate_month_end_pack
 from app.services.file_storage import FileStorageService
-from app.services.task import generate_instances_for_month, get_overdue
+from app.models.task import TaskInstance
+from app.services.task import create_action_todo, generate_instances_for_month, get_overdue
 
 
 async def run_daily(db: AsyncSession) -> AutomationResult:
@@ -34,6 +35,7 @@ async def run_daily(db: AsyncSession) -> AutomationResult:
     )
     overdue_invoices = list(overdue_result.scalars().all())
     for inv in overdue_invoices:
+        days_overdue = (today - inv.due_date).days if inv.due_date else 0
         items.append({
             "type": "overdue_invoice",
             "entity_type": "invoice",
@@ -44,6 +46,25 @@ async def run_daily(db: AsyncSession) -> AutomationResult:
             "total_amount": float(inv.total_amount),
             "description": f"Invoice {inv.invoice_number} is overdue since {inv.due_date}",
         })
+
+        # Create a follow-up todo if one doesn't already exist for this invoice
+        todo_title = f"Follow up on {inv.invoice_number} (overdue {days_overdue}d)"
+        existing_todo_result = await db.execute(
+            select(TaskInstance).where(
+                TaskInstance.title.like(f"Follow up on {inv.invoice_number}%"),
+                TaskInstance.status.in_(["pending", "in_progress"]),
+            )
+        )
+        if existing_todo_result.scalar_one_or_none() is None:
+            await create_action_todo(
+                db,
+                title=todo_title,
+                description=f"Invoice {inv.invoice_number} is overdue by {days_overdue} days (due {inv.due_date})",
+                category="operations",
+                due_date=today,
+                period=today.strftime("%Y-%m"),
+                created_by=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+            )
 
     # 2. Unpaid finalized payroll runs
     unpaid_payroll_result = await db.execute(

@@ -235,6 +235,7 @@ async def finalize_payroll(
             "name": run.employee.name,
             "email": run.employee.email or "",
             "work_pass_type": run.employee.work_pass_type or "",
+            "start_date": run.employee.start_date.isoformat() if run.employee.start_date else "",
         },
         "payroll": {
             "month": run.month.strftime("%B %Y"),
@@ -330,6 +331,18 @@ async def finalize_payroll(
         actor_id=user_id,
         output_data={"status": new_state, "payslip_file_id": str(file_record.id)},
     )
+
+    from app.services.task import create_action_todo
+    await create_action_todo(
+        db,
+        title=f"Send payslip to {run.employee.name}",
+        description=f"Payslip for {run.month.strftime('%B %Y')} is ready",
+        category="payroll",
+        due_date=date.today(),
+        period=run.month.strftime("%Y-%m"),
+        created_by=user_id,
+    )
+
     return run
 
 
@@ -559,6 +572,7 @@ async def regenerate_payslip(
             "name": run.employee.name,
             "email": run.employee.email or "",
             "work_pass_type": run.employee.work_pass_type or "",
+            "start_date": run.employee.start_date.isoformat() if run.employee.start_date else "",
         },
         "payroll": {
             "month": run.month.strftime("%B %Y"),

@@ -329,6 +329,37 @@ async def generate_instances_for_month(db: AsyncSession, month_str: str) -> list
 
 
 # ---------------------------------------------------------------------------
+# Action todos (one-off from business events)
+# ---------------------------------------------------------------------------
+
+
+async def create_action_todo(
+    db: AsyncSession,
+    title: str,
+    description: str,
+    category: str,
+    due_date: date,
+    period: str,
+    created_by,
+    priority: str = "medium",
+) -> TaskInstance:
+    """Create a one-off action todo from a business event."""
+    instance = TaskInstance(
+        title=title,
+        description=description,
+        category=category,
+        priority=priority,
+        period=period,
+        due_date=due_date,
+        status="pending",
+        created_by=created_by,
+    )
+    db.add(instance)
+    await db.flush()
+    return instance
+
+
+# ---------------------------------------------------------------------------
 # Smart features
 # ---------------------------------------------------------------------------
 

@@ -102,6 +102,7 @@ async def get_todo_current(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TodoSummary:
     period = datetime.now(timezone.utc).strftime("%Y-%m")
+    await task_svc.generate_instances_for_month(db, period)
     return await task_svc.get_todo_summary(db, period)
 
 
@@ -111,6 +112,9 @@ async def get_todo_period(
     current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TodoSummary:
+    # Only auto-generate for YYYY-MM periods (not quarterly/yearly)
+    if len(period) == 7 and period[4] == "-":
+        await task_svc.generate_instances_for_month(db, period)
     return await task_svc.get_todo_summary(db, period)
 
 
@@ -120,6 +124,8 @@ async def get_upcoming(
     db: Annotated[AsyncSession, Depends(get_db)],
     days: int = 30,
 ) -> list[TaskInstanceResponse]:
+    period = datetime.now(timezone.utc).strftime("%Y-%m")
+    await task_svc.generate_instances_for_month(db, period)
     items = await task_svc.get_upcoming(db, days=days)
     return [TaskInstanceResponse.model_validate(i) for i in items]
 

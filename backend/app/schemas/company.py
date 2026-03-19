@@ -20,7 +20,9 @@ class CompanySettingsResponse(BaseModel):
     default_payment_terms_days: int
     gst_registered: bool
     gst_rate: Optional[Decimal]
+    gst_registration_number: Optional[str]
     jurisdiction: Optional[str]
+    website: Optional[str]
     primary_color: Optional[str]
     accent_color: Optional[str]
     font_family: Optional[str]
@@ -40,7 +42,9 @@ class CompanySettingsUpdate(BaseModel):
     default_payment_terms_days: Optional[int] = None
     gst_registered: Optional[bool] = None
     gst_rate: Optional[Decimal] = None
+    gst_registration_number: Optional[str] = None
     jurisdiction: Optional[str] = None
+    website: Optional[str] = None
     primary_color: Optional[str] = None
     accent_color: Optional[str] = None
     font_family: Optional[str] = None
