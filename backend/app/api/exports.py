@@ -21,7 +21,7 @@ router = APIRouter()
 @router.post("/validate/{month}", response_model=ExportValidationResult)
 async def validate_month(
     month: str,
-    current_user: Annotated[AuthenticatedUser, require_permission("export:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("export:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ExportValidationResult:
     try:
@@ -33,7 +33,7 @@ async def validate_month(
 @router.post("/month-end", response_model=ExportPackResponse, status_code=status.HTTP_201_CREATED)
 async def generate_month_end(
     body: MonthEndRequest,
-    current_user: Annotated[AuthenticatedUser, require_permission("export:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("export:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
 ) -> ExportPackResponse:
@@ -52,7 +52,7 @@ async def generate_month_end(
 
 @router.get("", response_model=ExportListResponse)
 async def list_exports(
-    current_user: Annotated[AuthenticatedUser, require_permission("export:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("export:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     page: int = 1,
     per_page: int = 20,
@@ -67,7 +67,7 @@ async def list_exports(
 @router.get("/{export_id}", response_model=ExportPackResponse)
 async def get_export(
     export_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("export:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("export:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ExportPackResponse:
     pack = await export_svc.get_export(db, export_id)
@@ -79,7 +79,7 @@ async def get_export(
 @router.get("/{export_id}/download")
 async def get_export_download(
     export_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("export:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("export:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
 ) -> dict:

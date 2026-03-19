@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMPTZ, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -27,9 +27,9 @@ class RecurringInvoiceRule(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     next_issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_issued_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="SET NULL", use_alter=True), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     client = relationship("Client", foreign_keys=[client_id])
     currency_rel = relationship("Currency", foreign_keys=[currency])
@@ -65,15 +65,15 @@ class Invoice(Base):
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
     )
     recurring_rule_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("recurring_invoice_rules.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("recurring_invoice_rules.id", ondelete="SET NULL", use_alter=True), nullable=True
     )
     idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMPTZ, nullable=False, server_default=func.now(), onupdate=func.now()
+        TIMESTAMP, nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
     client = relationship("Client", back_populates="invoices", foreign_keys=[client_id])

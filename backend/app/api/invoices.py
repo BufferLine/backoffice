@@ -32,7 +32,7 @@ def _not_found() -> HTTPException:
 @router.post("", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
 async def create_invoice(
     body: InvoiceCreate,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InvoiceResponse:
     invoice = await invoice_service.create_invoice(
@@ -49,7 +49,7 @@ async def create_invoice(
 
 @router.get("", response_model=InvoiceListResponse)
 async def list_invoices(
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     invoice_status: Optional[str] = None,
     client_id: Optional[uuid.UUID] = None,
@@ -72,7 +72,7 @@ async def list_invoices(
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
 async def get_invoice(
     invoice_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InvoiceResponse:
     invoice = await invoice_service.get_invoice(db, invoice_id)
@@ -85,7 +85,7 @@ async def get_invoice(
 async def update_invoice(
     invoice_id: uuid.UUID,
     body: InvoiceUpdate,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InvoiceResponse:
     invoice = await invoice_service.get_invoice(db, invoice_id)
@@ -111,7 +111,7 @@ async def update_invoice(
 async def add_line_item(
     invoice_id: uuid.UUID,
     body: LineItemCreate,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LineItemResponse:
     invoice = await invoice_service.get_invoice(db, invoice_id)
@@ -137,7 +137,7 @@ async def update_line_item(
     invoice_id: uuid.UUID,
     item_id: uuid.UUID,
     body: LineItemUpdate,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LineItemResponse:
     invoice = await invoice_service.get_invoice(db, invoice_id)
@@ -166,7 +166,7 @@ async def update_line_item(
 async def delete_line_item(
     invoice_id: uuid.UUID,
     item_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     invoice = await invoice_service.get_invoice(db, invoice_id)
@@ -185,7 +185,7 @@ async def delete_line_item(
 @router.post("/{invoice_id}/issue", response_model=InvoiceResponse)
 async def issue_invoice(
     invoice_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
 ) -> InvoiceResponse:
@@ -212,7 +212,7 @@ async def issue_invoice(
 async def mark_paid(
     invoice_id: uuid.UUID,
     body: MarkPaidRequest,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InvoiceResponse:
     invoice = await invoice_service.get_invoice(db, invoice_id)
@@ -237,7 +237,7 @@ async def mark_paid(
 @router.post("/{invoice_id}/cancel", response_model=InvoiceResponse)
 async def cancel_invoice(
     invoice_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InvoiceResponse:
     invoice = await invoice_service.get_invoice(db, invoice_id)
@@ -262,7 +262,7 @@ async def cancel_invoice(
 async def attach_file(
     invoice_id: uuid.UUID,
     file: UploadFile,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
 ) -> dict:

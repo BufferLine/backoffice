@@ -21,7 +21,7 @@ router = APIRouter()
 async def upload_bank_statement(
     file: UploadFile,
     source: str,
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     original_filename = file.filename or "statement.csv"
@@ -44,7 +44,7 @@ async def upload_bank_statement(
 
 @router.get("/bank-transactions", response_model=BankTransactionListResponse)
 async def list_bank_transactions(
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     match_status: Optional[str] = None,
     source: Optional[str] = None,
@@ -63,7 +63,7 @@ async def list_bank_transactions(
 # Literal route must be declared before parameterized /{tx_id} routes
 @router.post("/bank-transactions/auto-match", response_model=AutoMatchResult)
 async def auto_match_transactions(
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutoMatchResult:
     return await bank_svc.auto_match(db)
@@ -72,7 +72,7 @@ async def auto_match_transactions(
 @router.get("/bank-transactions/{tx_id}", response_model=BankTransactionResponse)
 async def get_bank_transaction(
     tx_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BankTransactionResponse:
     try:
@@ -86,7 +86,7 @@ async def get_bank_transaction(
 async def match_bank_transaction(
     tx_id: uuid.UUID,
     data: BankTxMatchRequest,
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BankTransactionResponse:
     try:
@@ -102,7 +102,7 @@ async def match_bank_transaction(
 @router.post("/bank-transactions/{tx_id}/ignore", response_model=BankTransactionResponse)
 async def ignore_bank_transaction(
     tx_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BankTransactionResponse:
     try:

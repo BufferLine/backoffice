@@ -16,7 +16,7 @@ router = APIRouter()
 @router.post("", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
 async def create_client(
     body: ClientCreate,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ClientResponse:
     client = Client(
@@ -36,7 +36,7 @@ async def create_client(
 
 @router.get("", response_model=list[ClientResponse])
 async def list_clients(
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[ClientResponse]:
     result = await db.execute(
@@ -49,7 +49,7 @@ async def list_clients(
 @router.get("/{client_id}", response_model=ClientResponse)
 async def get_client(
     client_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ClientResponse:
     result = await db.execute(select(Client).where(Client.id == client_id))
@@ -63,7 +63,7 @@ async def get_client(
 async def update_client(
     client_id: uuid.UUID,
     body: ClientUpdate,
-    current_user: Annotated[AuthenticatedUser, require_permission("invoice:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ClientResponse:
     result = await db.execute(select(Client).where(Client.id == client_id))

@@ -18,7 +18,7 @@ router = APIRouter()
 @router.post("", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
 async def create_expense(
     data: ExpenseCreate,
-    current_user: Annotated[AuthenticatedUser, require_permission("expense:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ExpenseResponse:
     expense = await expense_svc.create_expense(db, data, current_user.id)
@@ -27,7 +27,7 @@ async def create_expense(
 
 @router.get("", response_model=ExpenseListResponse)
 async def list_expenses(
-    current_user: Annotated[AuthenticatedUser, require_permission("expense:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     month: Optional[str] = None,
     category: Optional[str] = None,
@@ -47,7 +47,7 @@ async def list_expenses(
 @router.get("/{expense_id}", response_model=ExpenseResponse)
 async def get_expense(
     expense_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("expense:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ExpenseResponse:
     try:
@@ -61,7 +61,7 @@ async def get_expense(
 async def update_expense(
     expense_id: uuid.UUID,
     data: ExpenseUpdate,
-    current_user: Annotated[AuthenticatedUser, require_permission("expense:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ExpenseResponse:
     try:
@@ -76,7 +76,7 @@ async def update_expense(
 @router.post("/{expense_id}/confirm", response_model=ExpenseResponse)
 async def confirm_expense(
     expense_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("expense:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ExpenseResponse:
     try:
@@ -92,7 +92,7 @@ async def confirm_expense(
 async def reimburse_expense(
     expense_id: uuid.UUID,
     payment_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("expense:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ExpenseResponse:
     try:
@@ -108,7 +108,7 @@ async def reimburse_expense(
 async def attach_file(
     expense_id: uuid.UUID,
     file: UploadFile,
-    current_user: Annotated[AuthenticatedUser, require_permission("expense:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     try:

@@ -20,7 +20,7 @@ router = APIRouter()
 
 @router.get("/company", response_model=CompanySettingsResponse)
 async def get_company_settings(
-    current_user: Annotated[AuthenticatedUser, require_permission("admin:manage_users")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CompanySettingsResponse:
     result = await db.execute(select(CompanySettings).limit(1))
@@ -37,7 +37,7 @@ async def get_company_settings(
 @router.patch("/company", response_model=CompanySettingsResponse)
 async def update_company_settings(
     body: CompanySettingsUpdate,
-    current_user: Annotated[AuthenticatedUser, require_permission("admin:manage_users")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CompanySettingsResponse:
     result = await db.execute(select(CompanySettings).limit(1))
@@ -71,7 +71,7 @@ async def list_currencies(
 @router.post("/currencies", response_model=CurrencyResponse, status_code=status.HTTP_201_CREATED)
 async def create_currency(
     body: CurrencyCreate,
-    current_user: Annotated[AuthenticatedUser, require_permission("admin:manage_users")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CurrencyResponse:
     # Check for duplicate

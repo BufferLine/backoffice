@@ -15,7 +15,7 @@ router = APIRouter()
 @router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def record_payment(
     data: PaymentCreate,
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PaymentResponse:
     try:
@@ -27,7 +27,7 @@ async def record_payment(
 
 @router.get("", response_model=PaymentListResponse)
 async def list_payments(
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     entity_type: Optional[str] = None,
     page: int = 1,
@@ -43,7 +43,7 @@ async def list_payments(
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment(
     payment_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PaymentResponse:
     try:
@@ -57,7 +57,7 @@ async def get_payment(
 async def link_payment(
     payment_id: uuid.UUID,
     data: PaymentLinkRequest,
-    current_user: Annotated[AuthenticatedUser, require_permission("payment:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PaymentResponse:
     try:

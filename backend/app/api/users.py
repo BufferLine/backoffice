@@ -45,7 +45,7 @@ def _user_to_response(user: User) -> UserResponse:
 @router.post("/invite", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def invite_user(
     body: UserCreate,
-    _: Annotated[AuthenticatedUser, require_permission("admin:manage_users")],
+    _: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserResponse:
     result = await db.execute(select(User).where(User.email == body.email))
@@ -70,7 +70,7 @@ async def invite_user(
 
 @router.get("", response_model=list[UserResponse])
 async def list_users(
-    _: Annotated[AuthenticatedUser, require_permission("admin:manage_users")],
+    _: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[UserResponse]:
     result = await db.execute(
@@ -85,7 +85,7 @@ async def list_users(
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: uuid.UUID,
-    _: Annotated[AuthenticatedUser, require_permission("admin:manage_users")],
+    _: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserResponse:
     result = await db.execute(
@@ -103,7 +103,7 @@ async def get_user(
 async def update_user(
     user_id: uuid.UUID,
     body: UserUpdate,
-    _: Annotated[AuthenticatedUser, require_permission("admin:manage_users")],
+    _: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_users"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserResponse:
     result = await db.execute(
@@ -129,7 +129,7 @@ async def update_user(
 async def assign_role(
     user_id: uuid.UUID,
     body: RoleAssign,
-    _: Annotated[AuthenticatedUser, require_permission("admin:manage_roles")],
+    _: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_roles"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserResponse:
     result = await db.execute(
@@ -157,7 +157,7 @@ async def assign_role(
 async def remove_role(
     user_id: uuid.UUID,
     role_id: uuid.UUID,
-    _: Annotated[AuthenticatedUser, require_permission("admin:manage_roles")],
+    _: Annotated[AuthenticatedUser, Depends(require_permission("admin:manage_roles"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserResponse:
     result = await db.execute(

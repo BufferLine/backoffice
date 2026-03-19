@@ -14,7 +14,7 @@ router = APIRouter()
 
 @router.post("/daily", response_model=AutomationResult)
 async def run_daily(
-    current_user: Annotated[AuthenticatedUser, require_permission("export:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("export:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutomationResult:
     try:
@@ -25,7 +25,7 @@ async def run_daily(
 
 @router.post("/weekly", response_model=AutomationResult)
 async def run_weekly(
-    current_user: Annotated[AuthenticatedUser, require_permission("export:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("export:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AutomationResult:
     try:
@@ -36,7 +36,7 @@ async def run_weekly(
 
 @router.post("/monthly", response_model=AutomationResult)
 async def run_monthly(
-    current_user: Annotated[AuthenticatedUser, require_permission("export:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("export:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
     month: str = Query(..., description="Month in YYYY-MM format"),

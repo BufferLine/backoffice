@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, Column, ForeignKey, String, Table, Text
-from sqlalchemy.dialects.postgresql import TIMESTAMPTZ, UUID
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -32,9 +32,9 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMPTZ, nullable=False, server_default=func.now(), onupdate=func.now()
+        TIMESTAMP, nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
     roles: Mapped[list["Role"]] = relationship("Role", secondary=user_roles, back_populates="users")
@@ -77,9 +77,9 @@ class ApiToken(Base):
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    last_used_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ, nullable=True)
-    expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ, nullable=True)
-    revoked_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     user: Mapped["User"] = relationship("User", back_populates="api_tokens")

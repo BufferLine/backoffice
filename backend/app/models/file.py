@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import BigInteger, ForeignKey, String
-from sqlalchemy.dialects.postgresql import TIMESTAMPTZ, UUID
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -18,7 +18,7 @@ class File(Base):
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    uploaded_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    uploaded_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

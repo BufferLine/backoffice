@@ -230,7 +230,7 @@ async def finalize_payroll(
             "email": run.employee.email or "",
             "work_pass_type": run.employee.work_pass_type or "",
         },
-        "payroll_run": {
+        "payroll": {
             "month": run.month.strftime("%B %Y"),
             "start_date": run.start_date.isoformat(),
             "end_date": run.end_date.isoformat(),

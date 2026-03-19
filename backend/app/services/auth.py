@@ -3,8 +3,8 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -12,19 +12,18 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.models.user import ApiToken, Permission, Role, User, role_permissions, user_roles
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 ALGORITHM = "HS256"
 
 
 # --- Password helpers ---
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
 # --- JWT helpers ---
@@ -218,9 +217,9 @@ async def seed_permissions(db: AsyncSession) -> dict[str, Permission]:
 
 async def seed_roles(db: AsyncSession, permissions_map: dict[str, Permission]) -> None:
     """Ensure all default roles exist with correct permissions."""
-    result = await db.execute(
-        select(Role).options(selectinload(Role.permissions))
-    )
+    from app.models.user import role_permissions as rp_table
+
+    result = await db.execute(select(Role))
     existing_roles = {r.name: r for r in result.scalars().all()}
 
     for role_name, description, perm_keys in _DEFAULT_ROLES:
@@ -228,15 +227,22 @@ async def seed_roles(db: AsyncSession, permissions_map: dict[str, Permission]) -
             role = Role(name=role_name, description=description, is_system=True)
             db.add(role)
             await db.flush()
-            await db.refresh(role)
             existing_roles[role_name] = role
 
         role = existing_roles[role_name]
-        existing_perm_ids = {p.id for p in role.permissions}
+
+        # Get existing permission links via junction table
+        existing_links = await db.execute(
+            select(rp_table.c.permission_id).where(rp_table.c.role_id == role.id)
+        )
+        existing_perm_ids = {row[0] for row in existing_links.all()}
+
         for key in perm_keys:
             perm = permissions_map.get(key)
             if perm and perm.id not in existing_perm_ids:
-                role.permissions.append(perm)
+                await db.execute(
+                    rp_table.insert().values(role_id=role.id, permission_id=perm.id)
+                )
                 existing_perm_ids.add(perm.id)
 
     await db.flush()
@@ -266,6 +272,10 @@ async def create_superadmin(db: AsyncSession, email: str, password: str) -> None
     await db.flush()
 
     if superadmin_role is not None:
-        user.roles.append(superadmin_role)
+        # Use direct insert into junction table to avoid lazy-load issues
+        from app.models.user import user_roles
+        await db.execute(
+            user_roles.insert().values(user_id=user.id, role_id=superadmin_role.id)
+        )
 
     await db.flush()

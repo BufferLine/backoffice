@@ -105,8 +105,12 @@ async def get_current_user(
     return AuthenticatedUser(user=user, permissions=permissions)
 
 
-def require_permission(*perms: str) -> Depends:
-    """Dependency factory: checks that the current user has ALL listed permissions."""
+def require_permission(*perms: str):
+    """Dependency factory: checks that the current user has ALL listed permissions.
+
+    Use with Annotated:  Annotated[AuthenticatedUser, Depends(require_permission("x:y"))]
+    Or as default:       user = Depends(require_permission("x:y"))
+    """
 
     async def checker(
         current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
@@ -120,4 +124,4 @@ def require_permission(*perms: str) -> Depends:
             )
         return current_user
 
-    return Depends(checker)
+    return checker

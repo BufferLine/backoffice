@@ -36,7 +36,7 @@ employees_router = APIRouter()
 @employees_router.post("", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
 async def create_employee(
     body: EmployeeCreate,
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> EmployeeResponse:
     employee = await payroll_service.create_employee(
@@ -49,7 +49,7 @@ async def create_employee(
 
 @employees_router.get("", response_model=list[EmployeeResponse])
 async def list_employees(
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     status_filter: Optional[str] = Query(None, alias="status"),
 ) -> list[EmployeeResponse]:
@@ -64,7 +64,7 @@ async def list_employees(
 @employees_router.get("/{employee_id}", response_model=EmployeeResponse)
 async def get_employee(
     employee_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> EmployeeResponse:
     result = await db.execute(select(Employee).where(Employee.id == employee_id))
@@ -78,7 +78,7 @@ async def get_employee(
 async def update_employee(
     employee_id: uuid.UUID,
     body: EmployeeUpdate,
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> EmployeeResponse:
     employee = await payroll_service.update_employee(
@@ -99,7 +99,7 @@ async def update_employee(
 @router.post("/runs", response_model=PayrollRunResponse, status_code=status.HTTP_201_CREATED)
 async def create_payroll_run(
     body: PayrollRunCreate,
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PayrollRunResponse:
     try:
@@ -121,7 +121,7 @@ async def create_payroll_run(
 
 @router.get("/runs", response_model=PayrollListResponse)
 async def list_payroll_runs(
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     month: Optional[str] = Query(None, description="Filter by month YYYY-MM"),
     employee_id: Optional[uuid.UUID] = Query(None),
@@ -146,7 +146,7 @@ async def list_payroll_runs(
 @router.get("/runs/{run_id}", response_model=PayrollRunResponse)
 async def get_payroll_run(
     run_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:read")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PayrollRunResponse:
     run = await payroll_service.get_payroll_run(db, run_id)
@@ -158,7 +158,7 @@ async def get_payroll_run(
 @router.post("/runs/{run_id}/review", response_model=PayrollRunResponse)
 async def review_payroll_run(
     run_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PayrollRunResponse:
     try:
@@ -177,7 +177,7 @@ async def review_payroll_run(
 @router.post("/runs/{run_id}/finalize", response_model=PayrollRunResponse)
 async def finalize_payroll_run(
     run_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:finalize")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:finalize"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
 ) -> PayrollRunResponse:
@@ -200,7 +200,7 @@ async def finalize_payroll_run(
 async def mark_payroll_paid(
     run_id: uuid.UUID,
     body: PayrollMarkPaidRequest,
-    current_user: Annotated[AuthenticatedUser, require_permission("payroll:write")],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payroll:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PayrollRunResponse:
     try:
