@@ -89,10 +89,10 @@
     <div class="meta-block">
       <h3>Bill To</h3>
       <p>
-        <strong>{{ client.name }}</strong><br/>
-        {% if client.address %}{{ client.address }}<br/>{% endif %}
+        <strong>{{ client.legal_name }}</strong><br/>
+        {% if client.billing_address %}{{ client.billing_address }}<br/>{% endif %}
         {% if client.uen %}UEN: {{ client.uen }}<br/>{% endif %}
-        {% if client.email %}{{ client.email }}{% endif %}
+        {% if client.billing_email %}{{ client.billing_email }}{% endif %}
       </p>
     </div>
     <div class="meta-block">
@@ -125,7 +125,7 @@
       {% for item in line_items %}
       <tr>
         <td>{{ item.description }}</td>
-        <td class="right">{{ item.quantity }}</td>
+        <td class="right">{{ item.quantity | int if item.quantity == item.quantity | int else item.quantity }}</td>
         <td class="right">{{ invoice.currency }} {{ item.unit_price|money }}</td>
         <td class="right">{{ invoice.currency }} {{ item.amount|money }}</td>
       </tr>
@@ -174,18 +174,36 @@
   <div class="section">
     <h3>Payment Details</h3>
     <div class="payment-info">
-      {% if invoice.payment_method == "bank_transfer" and payment_details %}
-        <p>
-          <strong>Bank:</strong> {{ payment_details.bank_name }}<br/>
-          <strong>Account Name:</strong> {{ payment_details.account_name }}<br/>
-          <strong>Account Number:</strong> {{ payment_details.account_number }}<br/>
-          {% if payment_details.swift %}<strong>SWIFT:</strong> {{ payment_details.swift }}<br/>{% endif %}
-          {% if payment_details.reference %}<strong>Reference:</strong> {{ payment_details.reference }}{% endif %}
-        </p>
+      {% if payment_details %}
+        {% if payment_details.nickname %}
+          <p style="font-size:8.5pt; color:#888; margin-bottom:4pt;">{{ payment_details.nickname }}</p>
+        {% endif %}
+        {% if payment_details.type == "crypto" %}
+          <p>
+            <strong>Payment:</strong> USDC/USDT{% if payment_details.chain_id %} ({{ payment_details.chain_id }}){% endif %}<br/>
+            {% if payment_details.account_name %}<strong>Account Name:</strong> {{ payment_details.account_name }}<br/>{% endif %}
+            <strong>Wallet Address:</strong><br/>
+            <code style="font-size:9pt; word-break:break-all;">{{ payment_details.wallet_address }}</code>
+          </p>
+        {% elif payment_details.type == "paynow" %}
+          <p>
+            <strong>PayNow UEN:</strong> {{ payment_details.uen_number }}<br/>
+            <strong>Account Name:</strong> {{ payment_details.account_name }}
+          </p>
+        {% else %}
+          <p>
+            <strong>Bank:</strong> {{ payment_details.bank_name }}<br/>
+            <strong>Account Name:</strong> {{ payment_details.account_name }}<br/>
+            <strong>Account Number:</strong> {{ payment_details.account_number }}<br/>
+            {% if payment_details.swift %}<strong>SWIFT:</strong> {{ payment_details.swift }}<br/>{% endif %}
+            {% if payment_details.reference %}<strong>Reference:</strong> {{ payment_details.reference }}{% endif %}
+          </p>
+        {% endif %}
       {% elif invoice.payment_method == "crypto" and invoice.wallet_address %}
         <p>
-          <strong>Wallet Address:</strong> {{ invoice.wallet_address }}<br/>
-          <strong>Currency:</strong> {{ invoice.currency }}
+          <strong>Payment:</strong> USDC/USDT<br/>
+          <strong>Wallet Address:</strong><br/>
+          <code style="font-size:9pt; word-break:break-all;">{{ invoice.wallet_address }}</code>
         </p>
       {% else %}
         <p>Please contact us for payment instructions.</p>

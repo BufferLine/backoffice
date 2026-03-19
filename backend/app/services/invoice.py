@@ -14,6 +14,7 @@ from app.models.company import CompanySettings
 from app.models.file import File
 from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.payment import Payment
+from app.models.payment_method import PaymentMethod
 from app.services.audit import AuditService
 from app.services.changelog import track_status_change
 from app.services.file_storage import FileStorageService
@@ -92,12 +93,26 @@ async def create_invoice(
     payment_method: Optional[str] = None,
     wallet_address: Optional[str] = None,
     tax_inclusive: bool = False,
+    payment_method_id: Optional[uuid.UUID] = None,
 ) -> Invoice:
     """Create a new draft invoice with auto-generated invoice number.
 
     Uses a retry loop (up to 3 attempts) to handle concurrent inserts that
     collide on the unique invoice_number constraint.
     """
+    # Auto-resolve default payment method for currency if not provided
+    if payment_method_id is None:
+        result = await db.execute(
+            select(PaymentMethod).where(
+                PaymentMethod.currency == currency,
+                PaymentMethod.is_default == True,
+                PaymentMethod.is_active == True,
+            ).limit(1)
+        )
+        default_method = result.scalar_one_or_none()
+        if default_method is not None:
+            payment_method_id = default_method.id
+
     last_error: Exception = RuntimeError("Invoice number generation failed")
     for _ in range(3):
         invoice_number = await _next_invoice_number(db)
@@ -114,6 +129,7 @@ async def create_invoice(
             tax_amount=0.0,
             total_amount=0.0,
             tax_inclusive=tax_inclusive,
+            payment_method_id=payment_method_id,
         )
         db.add(invoice)
         try:
@@ -173,6 +189,7 @@ async def update_invoice(
     payment_method: Optional[str] = None,
     wallet_address: Optional[str] = None,
     tax_inclusive: Optional[bool] = None,
+    payment_method_id: Optional[uuid.UUID] = None,
 ) -> Invoice:
     """Update a draft invoice's fields."""
     if invoice.status != "draft":
@@ -189,6 +206,8 @@ async def update_invoice(
     if tax_inclusive is not None:
         invoice.tax_inclusive = tax_inclusive
         await recalculate_totals(db, invoice)
+    if payment_method_id is not None:
+        invoice.payment_method_id = payment_method_id
 
     await db.flush()
     return invoice
@@ -391,6 +410,52 @@ async def _generate_invoice_pdf(
             "billing_address": client.billing_address,
         }
 
+    # Build payment_details: prefer linked PaymentMethod over company settings
+    payment_details = None
+    if invoice.payment_method_id is not None:
+        pm_result = await db.execute(
+            select(PaymentMethod).where(PaymentMethod.id == invoice.payment_method_id)
+        )
+        pm = pm_result.scalar_one_or_none()
+        if pm is not None:
+            if pm.type == "crypto":
+                payment_details = {
+                    "type": "crypto",
+                    "nickname": pm.nickname,
+                    "wallet_address": pm.wallet_address,
+                    "chain_id": pm.chain_id,
+                    "account_name": company.legal_name if company else None,
+                    "reference": invoice.invoice_number,
+                }
+            elif pm.type == "paynow":
+                payment_details = {
+                    "type": "paynow",
+                    "nickname": pm.nickname,
+                    "uen_number": pm.uen_number,
+                    "account_name": company.legal_name if company else None,
+                    "reference": invoice.invoice_number,
+                }
+            else:
+                payment_details = {
+                    "type": pm.type,
+                    "nickname": pm.nickname,
+                    "bank_name": pm.bank_name,
+                    "account_name": company.legal_name if company else None,
+                    "account_number": pm.bank_account_number,
+                    "swift": pm.bank_swift_code,
+                    "reference": invoice.invoice_number,
+                }
+    elif company and company.bank_name:
+        payment_details = {
+            "type": "bank_transfer",
+            "nickname": None,
+            "bank_name": company.bank_name,
+            "account_name": company.legal_name,
+            "account_number": company.bank_account_number,
+            "swift": company.bank_swift_code,
+            "reference": invoice.invoice_number,
+        }
+
     pdf_data = {
         "invoice": {
             "invoice_number": invoice.invoice_number,
@@ -409,6 +474,7 @@ async def _generate_invoice_pdf(
         "company": company_data,
         "client": client_data,
         "line_items": line_items_data,
+        "payment_details": payment_details,
     }
 
     # Load company stamp if available

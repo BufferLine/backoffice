@@ -14,11 +14,15 @@ def create(
     client: str = typer.Option(..., "--client", help="Client ID"),
     currency: str = typer.Option("SGD", "--currency", help="Invoice currency code"),
     description: str = typer.Option("", "--description", help="Invoice description"),
+    payment_method: Optional[str] = typer.Option(None, "--payment-method", help="Payment method ID"),
 ) -> None:
     """Create a new draft invoice."""
+    payload: dict = {"client_id": client, "currency": currency, "description": description}
+    if payment_method is not None:
+        payload["payment_method_id"] = payment_method
     data = api_post(
         "/api/invoices",
-        json_data={"client_id": client, "currency": currency, "description": description},
+        json_data=payload,
     )
     print_success(f"Invoice created: {data['id']}")
     print_json(data)

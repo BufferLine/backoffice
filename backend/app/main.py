@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import auth, automation, bank_reconciliation, changelog, clients, expenses, exports, files, invoices, payments, payroll, setup, tasks, users
 from app.api import settings as settings_router
 from app.api import accounts, transactions, recurring_commitments
+from app.api import payment_methods
 from app.api.payroll import employees_router
 from app.database import AsyncSessionLocal
 from app.services.auth import seed_permissions, seed_roles
@@ -91,6 +92,7 @@ app.include_router(changelog.router, prefix="/api/changelog", tags=["changelog"]
 app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(recurring_commitments.router, prefix="/api/recurring-commitments", tags=["recurring-commitments"])
+app.include_router(payment_methods.router, prefix="/api/payment-methods", tags=["payment-methods"])
 
 
 @app.get("/health")

@@ -77,6 +77,7 @@ class InvoiceCreate(BaseModel):
     payment_method: Optional[str] = None
     wallet_address: Optional[str] = None
     tax_inclusive: bool = False
+    payment_method_id: Optional[UUID] = None
 
 
 class InvoiceUpdate(BaseModel):
@@ -85,6 +86,7 @@ class InvoiceUpdate(BaseModel):
     payment_method: Optional[str] = None
     wallet_address: Optional[str] = None
     tax_inclusive: Optional[bool] = None
+    payment_method_id: Optional[UUID] = None
 
 
 class InvoiceResponse(BaseModel):
@@ -103,6 +105,7 @@ class InvoiceResponse(BaseModel):
     description: Optional[str]
     payment_method: Optional[str]
     wallet_address: Optional[str]
+    payment_method_id: Optional[UUID]
     line_items: list[LineItemResponse] = []
     created_at: datetime
     updated_at: datetime
