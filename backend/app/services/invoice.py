@@ -622,6 +622,7 @@ async def _generate_invoice_pdf(
             uen=payment_details["uen_number"],
             amount=Decimal(str(invoice.total_amount)),
             reference=payment_details.get("reference", ""),
+            merchant_name=payment_details.get("account_name", ""),
         )
     else:
         pdf_data["paynow_qr_uri"] = None

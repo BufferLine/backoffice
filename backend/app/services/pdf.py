@@ -45,17 +45,93 @@ def _encode_image(image_bytes: Optional[bytes], mime_type: str = "image/png") ->
 _encode_stamp = _encode_image
 
 
-def _generate_paynow_qr(uen: str, amount: Decimal, reference: str = "") -> Optional[str]:
-    """Generate PayNow QR code as base64 data URI."""
+def _emv_tlv(tag: str, value: str) -> str:
+    """Encode a single EMVCo TLV (Tag-Length-Value) data object."""
+    return f"{tag}{len(value):02d}{value}"
+
+
+def _crc16_ccitt(data: str) -> str:
+    """Compute CRC16-CCITT (0xFFFF) over a string and return 4-char hex."""
+    crc = 0xFFFF
+    for byte in data.encode("ascii"):
+        crc ^= byte << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = (crc << 1) ^ 0x1021
+            else:
+                crc <<= 1
+            crc &= 0xFFFF
+    return f"{crc:04X}"
+
+
+def _build_sgqr_payload(
+    uen: str,
+    amount: Decimal,
+    reference: str = "",
+    merchant_name: str = "",
+    editable: bool = False,
+) -> str:
+    """Build EMVCo Merchant Presented QR payload for PayNow (SGQR).
+
+    Follows EMVCo QR Code Specification for Payment Systems v1.1
+    with PayNow-specific Merchant Account Information (tag 26).
+    """
+    # Tag 26: Merchant Account Information — PayNow
+    mai_value = (
+        _emv_tlv("00", "SG.PAYNOW")     # Globally unique identifier
+        + _emv_tlv("01", "2")             # Proxy type: 2 = UEN
+        + _emv_tlv("02", uen)             # Proxy value (UEN)
+        + _emv_tlv("03", "0" if not editable else "1")  # Amount editable
+    )
+
+    parts = [
+        _emv_tlv("00", "01"),             # Payload Format Indicator
+        _emv_tlv("01", "12"),             # Point of Initiation: 12 = dynamic
+        _emv_tlv("26", mai_value),        # PayNow merchant account info
+        _emv_tlv("52", "0000"),           # Merchant Category Code (not applicable)
+        _emv_tlv("53", "702"),            # Transaction Currency: 702 = SGD
+    ]
+
+    # Tag 54: Transaction Amount (omit for open amount)
+    if amount and amount > 0:
+        parts.append(_emv_tlv("54", f"{amount:.2f}"))
+
+    parts.append(_emv_tlv("58", "SG"))   # Country Code
+
+    # Tag 59: Merchant Name (max 25 chars per spec)
+    name = (merchant_name or "COMPANY")[:25]
+    parts.append(_emv_tlv("59", name))
+
+    parts.append(_emv_tlv("60", "Singapore"))  # Merchant City
+
+    # Tag 62: Additional Data Field Template
+    if reference:
+        ref_trimmed = reference[:25]  # max 25 chars per spec
+        parts.append(_emv_tlv("62", _emv_tlv("01", ref_trimmed)))
+
+    # Tag 63: CRC — placeholder "0000" first, then compute over full string
+    payload_without_crc = "".join(parts) + "6304"
+    crc = _crc16_ccitt(payload_without_crc)
+    return payload_without_crc + crc
+
+
+def _generate_paynow_qr(
+    uen: str,
+    amount: Decimal,
+    reference: str = "",
+    merchant_name: str = "",
+) -> Optional[str]:
+    """Generate PayNow SGQR code (EMVCo TLV format) as base64 data URI."""
     try:
         import qrcode
         from io import BytesIO
 
-        # SGQR PayNow format (simplified)
-        # Format: UEN + amount for basic PayNow transfer
-        payload = f"https://www.paynow.sg/pay?uen={uen}&amount={amount}"
-        if reference:
-            payload += f"&ref={reference}"
+        payload = _build_sgqr_payload(
+            uen=uen,
+            amount=amount,
+            reference=reference,
+            merchant_name=merchant_name,
+        )
 
         qr = qrcode.make(payload, box_size=4, border=2)
         buffer = BytesIO()

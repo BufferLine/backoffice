@@ -36,9 +36,9 @@ Modular integration architecture: each provider is a plugin with API client, web
 ### Phase 1 — Quick Wins (Low effort, high value)
 
 #### PayNow SGQR Fix
-- [ ] Replace URL-based QR with proper EMVCo/SGQR TLV format
-- [ ] Test with DBS, OCBC, UOB mobile banking apps
-- [ ] Add amount + reference encoding per SGQR spec
+- [x] Replace URL-based QR with proper EMVCo/SGQR TLV format
+- [x] Test with DBS, OCBC, UOB mobile banking apps
+- [x] Add amount + reference encoding per SGQR spec
 
 #### DBS Statement Parser
 - [ ] Add `DBSParser` for DBS iBanking CSV format
