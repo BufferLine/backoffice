@@ -1,6 +1,8 @@
 # Environment
 .env
+.env.production
 !.env.example
+!.env.production.example
 
 # Python
 __pycache__/
@@ -35,6 +37,7 @@ docker-compose.override.yml
 # Storage
 uploads/
 exports/
+logs/
 
 # Testing
 .coverage

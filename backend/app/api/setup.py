@@ -117,7 +117,8 @@ async def setup_init(
     db.add(setup_token)
     await db.flush()
 
-    setup_url = f"http://localhost:3000/setup?token={raw_token}"
+    from app.config import settings
+    setup_url = f"{settings.API_BASE_URL}/setup?token={raw_token}"
 
     return SetupInitResponse(
         setup_url=setup_url,

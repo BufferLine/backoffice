@@ -64,12 +64,37 @@ scripts/                  # Dev/test/deploy scripts
 - **Single-entry cash ledger**: not double-entry bookkeeping (accountant handles that)
 - **Evidence-first**: every financial action produces proof (PDF, receipt, tx hash)
 
+## Agent Usage (for Claude Code / AI agents)
+
+### Install CLI
+pip install "git+https://github.com/bufferline/backoffice.git#subdirectory=cli"
+
+### Login
+acct login --email admin@bufferline.com --api-url https://backoffice.yourdomain.com
+
+### Monthly Workflow
+1. acct todo summary → check this month's tasks
+2. Process each todo in order
+3. acct automation monthly --month YYYY-MM
+4. acct export month-end --month YYYY-MM
+
+### Common Operations
+- acct invoice create/issue/download
+- acct payroll run/review/finalize/download
+- acct expense add/confirm
+- acct payment record
+- acct todo complete <id>
+
 ## Environment Variables
 
 See `.env.example`. Key vars:
-- `DB_PASSWORD` — PostgreSQL password
-- `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` — S3 storage
+- `DB_PASSWORD` — PostgreSQL password (local dev only)
+- `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` — S3 storage (local dev only)
 - `JWT_SECRET` — JWT signing key
+- `DATABASE_URL` — full DB connection string (production)
+- `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_REGION` — storage (production)
+- `API_BASE_URL` — external URL used in setup links
+- `CORS_ORIGINS` — comma-separated allowed origins
 
 ## Conventions
 

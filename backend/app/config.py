@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET: str = "backoffice"
+    S3_REGION: str = "auto"
 
     # JWT
     JWT_SECRET: str = "change-me-in-production"
@@ -21,6 +22,15 @@ class Settings(BaseSettings):
     # Superadmin bootstrap (legacy, optional - system now uses onboarding flow)
     SUPERADMIN_EMAIL: str | None = None
     SUPERADMIN_PASSWORD: str | None = None
+
+    # Environment
+    ENVIRONMENT: str = "development"
+
+    # Server
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8000
+    API_BASE_URL: str = "http://localhost:8000"
+    CORS_ORIGINS: str = "http://localhost:3000"
 
     # File uploads
     FILE_MAX_SIZE_BYTES: int = 10485760  # 10 MB
