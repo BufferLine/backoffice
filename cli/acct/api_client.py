@@ -92,6 +92,53 @@ def api_download(path: str, output_path: str) -> str:
     return filepath
 
 
+import re
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
+def _is_full_uuid(s: str) -> bool:
+    return bool(_UUID_RE.match(s))
+
+
+def resolve_payroll_id(prefix: str) -> str:
+    """Resolve a partial payroll run ID prefix to a full UUID. Skips API call if already full."""
+    if _is_full_uuid(prefix):
+        return prefix
+    clean = prefix.lower().replace("-", "")
+    data = api_get("/api/payroll/runs", params={"per_page": "100"})
+    items = data if isinstance(data, list) else data.get("items", [])
+    matches = [r["id"] for r in items if r["id"].replace("-", "").startswith(clean)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) == 0:
+        typer.echo(f"No payroll run found matching '{prefix}'", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Ambiguous prefix '{prefix}' matches {len(matches)} runs:", err=True)
+    for m in matches:
+        typer.echo(f"  {m}", err=True)
+    raise typer.Exit(1)
+
+
+def resolve_employee_id(prefix: str) -> str:
+    """Resolve a partial employee ID prefix to a full UUID. Skips API call if already full."""
+    if _is_full_uuid(prefix):
+        return prefix
+    clean = prefix.lower().replace("-", "")
+    data = api_get("/api/employees")
+    items = data if isinstance(data, list) else data
+    matches = [e["id"] for e in items if e["id"].replace("-", "").startswith(clean)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) == 0:
+        typer.echo(f"No employee found matching '{prefix}'", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Ambiguous prefix '{prefix}' matches {len(matches)} employees:", err=True)
+    for m in matches:
+        typer.echo(f"  {m}", err=True)
+    raise typer.Exit(1)
+
+
 def _handle_error(resp: httpx.Response) -> None:
     if resp.status_code >= 400:
         try:

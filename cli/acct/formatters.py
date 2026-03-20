@@ -8,9 +8,12 @@ console = Console()
 
 
 def print_table(title: str, columns: list[str], rows: list[list[Any]]) -> None:
-    table = Table(title=title)
+    table = Table(title=title, show_lines=False)
     for col in columns:
-        table.add_column(col)
+        if col.upper() == "ID":
+            table.add_column(col, no_wrap=True)
+        else:
+            table.add_column(col)
     for row in rows:
         table.add_row(*[str(v) for v in row])
     console.print(table)
