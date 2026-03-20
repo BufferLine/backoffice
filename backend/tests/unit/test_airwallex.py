@@ -120,7 +120,7 @@ class TestAirwallexPaymentLink:
             "POST",
             "/api/v1/pa/payment_links/create",
             json={
-                "amount": 50.0,
+                "amount": "50.00",
                 "currency": "SGD",
                 "title": "INV-TEST",
                 "reusable": False,

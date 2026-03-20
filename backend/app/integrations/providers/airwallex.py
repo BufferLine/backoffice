@@ -322,7 +322,7 @@ class AirwallexProvider(
         metadata: dict[str, Any] | None = None,
     ) -> PaymentLinkResult:
         payload: dict[str, Any] = {
-            "amount": float(amount),
+            "amount": amount,
             "currency": currency,
             "title": reference,
             "reusable": False,

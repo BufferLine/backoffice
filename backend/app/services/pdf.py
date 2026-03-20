@@ -46,8 +46,13 @@ _encode_stamp = _encode_image
 
 
 def _emv_tlv(tag: str, value: str) -> str:
-    """Encode a single EMVCo TLV (Tag-Length-Value) data object."""
-    return f"{tag}{len(value):02d}{value}"
+    """Encode a single EMVCo TLV (Tag-Length-Value) data object.
+
+    Length is measured in bytes (ASCII), not Python characters.
+    Non-ASCII characters are stripped to ensure valid EMVCo payload.
+    """
+    ascii_value = value.encode("ascii", errors="ignore").decode("ascii")
+    return f"{tag}{len(ascii_value):02d}{ascii_value}"
 
 
 def _crc16_ccitt(data: str) -> str:
