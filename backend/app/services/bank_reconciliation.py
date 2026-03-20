@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bank_transaction import BankTransaction
 from app.models.file import File
+from app.models.integration import IntegrationEvent
 from app.models.payment import Payment
 from app.schemas.bank import AutoMatchResult, AutoMatchResultItem
 from app.services.audit import AuditService
@@ -232,6 +233,74 @@ async def list_transactions(
 
 async def get_transaction(db: AsyncSession, tx_id: uuid.UUID) -> BankTransaction:
     return await _get_transaction(db, tx_id)
+
+
+async def create_from_event(
+    db: AsyncSession,
+    event_id: uuid.UUID,
+    source_tx_id: str,
+    tx_date: object,
+    amount: float,
+    currency: str,
+    user_id: uuid.UUID,
+    counterparty: Optional[str] = None,
+    reference: Optional[str] = None,
+    description: Optional[str] = None,
+    account_id: Optional[uuid.UUID] = None,
+) -> BankTransaction:
+    """Create a BankTransaction from a webhook event and mark the event as processed."""
+    # Verify event exists and is pending
+    result = await db.execute(
+        select(IntegrationEvent).where(IntegrationEvent.id == event_id)
+    )
+    event = result.scalar_one_or_none()
+    if event is None:
+        raise ValueError(f"IntegrationEvent {event_id} not found")
+    if event.status == "processed":
+        raise ValueError(f"Event {event_id} is already processed")
+
+    # Check duplicate
+    existing = await db.execute(
+        select(BankTransaction).where(
+            BankTransaction.source == event.provider,
+            BankTransaction.source_tx_id == source_tx_id,
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise ValueError(f"BankTransaction with source_tx_id={source_tx_id} already exists")
+
+    bank_tx = BankTransaction(
+        source=event.provider,
+        source_tx_id=source_tx_id,
+        tx_date=tx_date,
+        amount=amount,
+        currency=currency,
+        counterparty=counterparty,
+        reference=reference,
+        description=description,
+        match_status="unmatched",
+        raw_data_json=event.payload_json,
+        integration_event_id=event_id,
+        imported_by=user_id,
+        account_id=account_id,
+    )
+    db.add(bank_tx)
+
+    # Mark event as processed
+    event.status = "processed"
+    event.result_json = {"bank_transaction_source_tx_id": source_tx_id}
+
+    await db.flush()
+
+    await AuditService(db).log(
+        action="bank_transaction.create_from_event",
+        entity_type="bank_transaction",
+        entity_id=bank_tx.id,
+        actor_id=user_id,
+        input_data={"integration_event_id": str(event_id)},
+    )
+
+    return bank_tx
 
 
 async def _get_transaction(db: AsyncSession, tx_id: uuid.UUID) -> BankTransaction:

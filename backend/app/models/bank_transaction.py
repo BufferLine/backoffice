@@ -32,6 +32,9 @@ class BankTransaction(Base):
     match_status: Mapped[str] = mapped_column(String(20), nullable=False, default="unmatched")
     match_confidence: Mapped[float | None] = mapped_column(Numeric(3, 2), nullable=True)
     raw_data_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    integration_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("integration_events.id", ondelete="SET NULL"), nullable=True
+    )
     statement_file_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
     )
@@ -45,6 +48,7 @@ class BankTransaction(Base):
 
     currency_rel = relationship("Currency", foreign_keys=[currency])
     matched_payment = relationship("Payment", foreign_keys=[matched_payment_id])
+    integration_event = relationship("IntegrationEvent", foreign_keys=[integration_event_id])
     statement_file = relationship("File", foreign_keys=[statement_file_id])
     importer = relationship("User", foreign_keys=[imported_by])
     account = relationship("Account", foreign_keys=[account_id])

@@ -64,31 +64,23 @@ async def process_webhook(
             )
             return {"status": "duplicate", "event_id": event.event_id}, status.HTTP_200_OK
 
-    # --- Log event (before processing so it's recorded even on failure) ---
+    # --- Log event as pending (agent processes later) ---
     db_event = IntegrationEvent(
         provider=provider_name,
         direction="inbound",
         event_type=event.event_type,
         provider_event_id=event.event_id or None,
         payload_json=event.payload,
-        status="processing",
+        status="pending",
     )
     db.add(db_event)
     await db.flush()
 
-    # --- Handle event ---
-    try:
-        result_data = await provider.handle_event(event)
-        db_event.status = "processed"
-        db_event.result_json = result_data
-    except Exception as exc:
-        logger.exception(
-            "Error handling webhook event %s/%s", provider_name, event.event_id
-        )
-        db_event.status = "failed"
-        db_event.error_message = str(exc)
-        result_data = {"error": str(exc)}
+    logger.info(
+        "Webhook event %s/%s queued as pending (id=%s)",
+        provider_name,
+        event.event_id,
+        db_event.id,
+    )
 
-    await db.flush()
-
-    return {"status": db_event.status, "event_id": event.event_id, "result": result_data}, status.HTTP_200_OK
+    return {"status": "pending", "event_id": event.event_id}, status.HTTP_200_OK
