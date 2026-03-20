@@ -62,7 +62,9 @@ class AirwallexProvider(
         # Refresh if token is missing or within 60s of expiry
         if self._token is None or now >= self._token_expires_at - 60:
             await self._refresh_token()
-        return self._token  # type: ignore[return-value]
+        if self._token is None:
+            raise ProviderAPIError(self.name, 0, "Authentication did not return a bearer token")
+        return self._token
 
     async def _refresh_token(self) -> None:
         if not settings.AIRWALLEX_CLIENT_ID or not settings.AIRWALLEX_API_KEY:

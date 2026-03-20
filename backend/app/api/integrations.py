@@ -2,6 +2,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +49,8 @@ async def receive_webhook(
 
     if http_status == status.HTTP_401_UNAUTHORIZED:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=result.get("error"))
+    if http_status != status.HTTP_200_OK:
+        return JSONResponse(status_code=http_status, content=result)
 
     return result
 

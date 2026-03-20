@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from app.integrations.capabilities import Capability
+
 
 class IntegrationEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -28,7 +30,7 @@ class IntegrationEventListResponse(BaseModel):
 class ProviderCapabilityInfo(BaseModel):
     name: str
     display_name: str
-    capabilities: list[str]
+    capabilities: list[Capability]
     configured: bool
 
 
@@ -37,12 +39,12 @@ class ProviderListResponse(BaseModel):
 
 
 class SyncRequest(BaseModel):
-    capability: str = "sync_transactions"
+    capability: Capability = Capability.SYNC_TRANSACTIONS
 
 
 class SyncResponse(BaseModel):
     provider: str
-    capability: str
+    capability: Capability
     inserted: int
     skipped: int
     errors: int
