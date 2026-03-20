@@ -19,7 +19,7 @@ def _money(value, precision=2) -> str:
 def _pct(value) -> str:
     """Format a rate as percentage (e.g., 0.09 → 9.0)."""
     d = Decimal(str(value)) if not isinstance(value, Decimal) else value
-    return f"{d * 100:.1f}"
+    return f"{d * 100:.2f}"
 
 
 _env.filters["money"] = _money
