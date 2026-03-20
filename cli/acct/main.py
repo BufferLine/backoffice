@@ -5,6 +5,7 @@ import typer
 from acct.commands import auth, automation, bank, changelog, client, employee, expense, export, invoice, payment, payroll, settings, todo
 from acct.commands import account, transaction, commitment
 from acct.commands import payment_method
+from acct.commands import integration
 from acct.api_client import api_post
 from acct.config import save_credentials
 from acct.formatters import print_success
@@ -29,6 +30,7 @@ app.add_typer(account.app, name="account")
 app.add_typer(transaction.app, name="transaction")
 app.add_typer(commitment.app, name="commitment")
 app.add_typer(payment_method.app, name="payment-method")
+app.add_typer(integration.app, name="integration")
 
 
 @app.command()

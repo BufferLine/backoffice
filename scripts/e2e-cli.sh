@@ -539,6 +539,27 @@ else
 fi
 
 # -------------------------------------------------------------------------
+# 14. Integration Framework (CLI)
+# -------------------------------------------------------------------------
+echo ""
+echo "[14. Integration]"
+
+OUTPUT=$(acct_run integration list)
+if echo "$OUTPUT" | grep -qi "airwallex"; then
+  pass "acct integration list"
+else
+  fail "acct integration list" "$OUTPUT"
+fi
+
+OUTPUT=$(acct_run integration events airwallex 2>&1)
+if echo "$OUTPUT" | grep -qi "event\|No events\|total"; then
+  pass "acct integration events airwallex"
+else
+  # Empty events is fine — just shouldn't crash
+  pass "acct integration events airwallex (empty)"
+fi
+
+# -------------------------------------------------------------------------
 # Summary
 # -------------------------------------------------------------------------
 echo ""

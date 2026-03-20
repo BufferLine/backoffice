@@ -312,6 +312,46 @@ else
 fi
 
 # -------------------------------------------------------------------------
+# 11. Integration Framework
+# -------------------------------------------------------------------------
+echo ""
+echo "[11. Integration Framework]"
+
+# List providers
+INT_LIST=$(api "$API_URL/api/integrations")
+check "List integration providers" "echo '$INT_LIST'" '"providers"'
+check "Has total field" "echo '$INT_LIST'" '"total"'
+
+# Get single provider (airwallex)
+INT_DETAIL=$(api "$API_URL/api/integrations/airwallex")
+check "Get airwallex provider" "echo '$INT_DETAIL'" '"airwallex"'
+check "Has capabilities" "echo '$INT_DETAIL'" '"capabilities"'
+check "Has configured flag" "echo '$INT_DETAIL'" '"configured"'
+
+# Unknown provider should 404
+INT_BAD_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/api/integrations/nonexistent" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" 2>&1 || echo "000")
+if [ "$INT_BAD_STATUS" = "404" ]; then
+  pass "Unknown provider returns 404"
+else
+  fail "Unknown provider returns 404" "expected 404, got $INT_BAD_STATUS"
+fi
+
+# Events endpoint (empty but valid)
+INT_EVENTS=$(api "$API_URL/api/integrations/airwallex/events")
+check "List integration events" "echo '$INT_EVENTS'" '"items"'
+check "Events has total" "echo '$INT_EVENTS'" '"total"'
+
+# Webhook unknown provider should 404
+WH_BAD_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/api/webhooks/nonexistent" \
+  -H "Content-Type: application/json" -d '{}' 2>&1 || echo "000")
+if [ "$WH_BAD_STATUS" = "404" ]; then
+  pass "Webhook unknown provider returns 404"
+else
+  fail "Webhook unknown provider returns 404" "expected 404, got $WH_BAD_STATUS"
+fi
+
+# -------------------------------------------------------------------------
 # Summary
 # -------------------------------------------------------------------------
 echo ""
