@@ -20,15 +20,19 @@ Built for Singapore compliance (SDL, CPF, GST) with modular jurisdiction support
 
 ```bash
 # 1. Clone and enter
-git clone https://github.com/YOUR_ORG/backoffice.git && cd backoffice
+git clone https://github.com/BufferLine/backoffice.git && cd backoffice
 
 # 2. Full reset — starts Docker, creates DB, runs migrations, starts server
 scripts/reset.sh
 
-# 3. Initialize your company
+# 3. Install CLI
+brew install pipx
+pipx install "git+https://github.com/BufferLine/backoffice.git#subdirectory=cli"
+
+# 4. Initialize your company
 acct init --company-name "Your Company Pte Ltd" --jurisdiction SG
 
-# 4. Open the printed URL in browser to create your admin account, then login
+# 5. Open the printed URL in browser to create your admin account, then login
 acct login --email you@company.com
 ```
 
