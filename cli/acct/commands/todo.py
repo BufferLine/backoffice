@@ -36,7 +36,7 @@ def list_tasks(
         ["ID", "Title", "Category", "Priority", "Status", "Due Date", "Period"],
         [
             [
-                t.get("id", "")[:8] + "...",
+                t.get("id", ""),
                 t.get("title", ""),
                 t.get("category", ""),
                 t.get("priority", ""),
@@ -131,7 +131,7 @@ def upcoming(
         ["ID", "Title", "Category", "Priority", "Status", "Due Date"],
         [
             [
-                t.get("id", "")[:8] + "...",
+                t.get("id", ""),
                 t.get("title", ""),
                 t.get("category", ""),
                 t.get("priority", ""),
@@ -153,7 +153,7 @@ def overdue() -> None:
         ["ID", "Title", "Category", "Priority", "Due Date", "Period"],
         [
             [
-                t.get("id", "")[:8] + "...",
+                t.get("id", ""),
                 t.get("title", ""),
                 t.get("category", ""),
                 t.get("priority", ""),
@@ -218,7 +218,7 @@ def template_list(
         ["ID", "Title", "Category", "Frequency", "Due Day", "Priority", "System", "Active"],
         [
             [
-                t.get("id", "")[:8] + "...",
+                t.get("id", ""),
                 t.get("title", ""),
                 t.get("category", ""),
                 t.get("frequency", ""),

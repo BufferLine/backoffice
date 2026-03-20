@@ -42,7 +42,7 @@ def list_employees() -> None:
         ["ID", "Name", "Salary", "Currency", "Pass Type", "Start Date", "Status"],
         [
             [
-                emp.get("id", "")[:8],
+                emp.get("id", ""),
                 emp.get("name", ""),
                 emp.get("base_salary", ""),
                 emp.get("salary_currency", ""),

@@ -74,8 +74,8 @@ def list_payroll(
         ["ID", "Employee", "Month", "Prorated", "Deductions", "Net", "Status"],
         [
             [
-                r.get("id", "")[:8],
-                r.get("employee_id", "")[:8],
+                r.get("id", ""),
+                r.get("employee_id", ""),
                 r.get("month", ""),
                 r.get("prorated_gross_salary", ""),
                 r.get("total_deductions", ""),
