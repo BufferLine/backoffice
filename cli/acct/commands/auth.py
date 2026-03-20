@@ -16,7 +16,8 @@ def login(
     """Login and store API token."""
     resp = api_post("/api/auth/login", json_data={"email": email, "password": password})
     token = resp.get("access_token", "")
-    save_credentials(token, api_url)
+    refresh_token = resp.get("refresh_token")
+    save_credentials(token, api_url, refresh_token=refresh_token)
     print_success(f"Logged in as {email}")
 
 

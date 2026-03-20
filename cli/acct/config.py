@@ -17,9 +17,25 @@ def get_token() -> Optional[str]:
     return creds.get("token")
 
 
-def save_credentials(token: str, api_url: str = DEFAULT_API_URL) -> None:
+def get_refresh_token() -> Optional[str]:
+    creds = _load_credentials()
+    return creds.get("refresh_token")
+
+
+def save_credentials(token: str, api_url: str = DEFAULT_API_URL, refresh_token: Optional[str] = None) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CREDENTIALS_FILE.write_text(json.dumps({"token": token, "api_url": api_url}, indent=2))
+    data = {"token": token, "api_url": api_url}
+    if refresh_token:
+        data["refresh_token"] = refresh_token
+    CREDENTIALS_FILE.write_text(json.dumps(data, indent=2))
+    CREDENTIALS_FILE.chmod(0o600)
+
+
+def update_token(token: str) -> None:
+    """Update only the access token, preserving other credentials."""
+    creds = _load_credentials()
+    creds["token"] = token
+    CREDENTIALS_FILE.write_text(json.dumps(creds, indent=2))
     CREDENTIALS_FILE.chmod(0o600)
 
 
