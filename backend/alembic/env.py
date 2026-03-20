@@ -43,7 +43,10 @@ def do_run_migrations(connection):
 
 
 async def run_async_migrations() -> None:
-    engine = create_async_engine(settings.DATABASE_URL)
+    connect_args = {}
+    if "pooler.supabase.com" in settings.DATABASE_URL or getattr(settings, "ENVIRONMENT", "") == "production":
+        connect_args["statement_cache_size"] = 0
+    engine = create_async_engine(settings.DATABASE_URL, connect_args=connect_args)
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await engine.dispose()
