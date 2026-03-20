@@ -22,6 +22,25 @@ from app.state_machines import InvalidTransitionError
 from app.state_machines.payroll import payroll_machine
 
 
+def _split_deductions(deductions):
+    """Split deductions into employee deductions and employer costs."""
+    employee_deductions = []
+    employer_costs = []
+    for d in deductions:
+        entry = {
+            "type": d.deduction_type,
+            "description": d.description,
+            "amount": float(d.amount),
+            "rate": float(d.rate) if d.rate is not None else None,
+            "metadata": d.metadata_json or {},
+        }
+        if (d.metadata_json or {}).get("employer_cost", False):
+            employer_costs.append(entry)
+        else:
+            employee_deductions.append(entry)
+    return employee_deductions, employer_costs
+
+
 async def _get_company_settings(db: AsyncSession) -> CompanySettings:
     result = await db.execute(select(CompanySettings).limit(1))
     settings = result.scalar_one_or_none()
@@ -214,16 +233,7 @@ async def finalize_payroll(
     # Generate payslip PDF
     company_settings = await _get_company_settings(db)
 
-    deductions_data = [
-        {
-            "type": d.deduction_type,
-            "description": d.description,
-            "amount": float(d.amount),
-            "rate": float(d.rate) if d.rate is not None else None,
-            "metadata": d.metadata_json or {},
-        }
-        for d in run.deductions
-    ]
+    deductions_data, employer_costs_data = _split_deductions(run.deductions)
 
     pdf_data = {
         "company": {
@@ -250,6 +260,7 @@ async def finalize_payroll(
             "net_salary": float(run.net_salary),
         },
         "deductions": deductions_data,
+        "employer_costs": employer_costs_data,
     }
 
     # Load company stamp if available
@@ -551,16 +562,7 @@ async def regenerate_payslip(
 
     company_settings = await _get_company_settings(db)
 
-    deductions_data = [
-        {
-            "type": d.deduction_type,
-            "description": d.description,
-            "amount": float(d.amount),
-            "rate": float(d.rate) if d.rate is not None else None,
-            "metadata": d.metadata_json or {},
-        }
-        for d in run.deductions
-    ]
+    deductions_data, employer_costs_data = _split_deductions(run.deductions)
 
     pdf_data = {
         "company": {
@@ -587,6 +589,7 @@ async def regenerate_payslip(
             "net_salary": float(run.net_salary),
         },
         "deductions": deductions_data,
+        "employer_costs": employer_costs_data,
     }
 
     # Load stamp

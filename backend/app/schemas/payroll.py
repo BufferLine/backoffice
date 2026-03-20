@@ -90,6 +90,7 @@ class PayrollRunResponse(BaseModel):
     paid_at: Optional[datetime]
     payment_id: Optional[UUID]
     deductions: list[PayrollDeductionResponse] = []
+    employer_costs: list[PayrollDeductionResponse] = []
     created_at: datetime
     updated_at: datetime
 
@@ -122,7 +123,14 @@ class PayrollRunResponse(BaseModel):
                     "payslip_file_id": data.payslip_file_id,
                     "paid_at": data.paid_at,
                     "payment_id": data.payment_id,
-                    "deductions": data.deductions,
+                    "deductions": [
+                        d for d in data.deductions
+                        if not (getattr(d, "metadata_json", None) or {}).get("employer_cost", False)
+                    ],
+                    "employer_costs": [
+                        d for d in data.deductions
+                        if (getattr(d, "metadata_json", None) or {}).get("employer_cost", False)
+                    ],
                     "created_at": data.created_at,
                     "updated_at": data.updated_at,
                 }

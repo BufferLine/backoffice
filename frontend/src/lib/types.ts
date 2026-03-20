@@ -119,6 +119,7 @@ export interface PayrollRun {
   net_salary: string;
   status: PayrollStatus;
   deductions: PayrollDeduction[];
+  employer_costs: PayrollDeduction[];
   paid_at: string | null;
   created_at: string;
   updated_at: string;

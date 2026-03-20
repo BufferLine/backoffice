@@ -167,6 +167,28 @@
     <span class="net-amount">{{ payroll.currency }} {{ payroll.net_salary|money }}</span>
   </div>
 
+  <!-- ── Employer Contributions ──────────────────────────── -->
+  {% if employer_costs %}
+  <div class="section">
+    <h3>Employer Contributions</h3>
+    <table>
+      <tbody>
+        {% for d in employer_costs %}
+        <tr>
+          <td class="label">
+            {{ d.description }}
+            {% if d.rate %}
+              <span style="font-size:8pt; color:#888;">({{ d.rate|pct }}%)</span>
+            {% endif %}
+          </td>
+          <td class="right">{{ payroll.currency }} {{ d.amount|money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   <!-- ── Payment Info ─────────────────────────────────────── -->
   {% if payment_details %}
   <div class="section">
