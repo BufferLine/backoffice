@@ -67,10 +67,10 @@ scripts/                  # Dev/test/deploy scripts
 ## Agent Usage (for Claude Code / AI agents)
 
 ### Install CLI
-pip install "git+https://github.com/bufferline/backoffice.git#subdirectory=cli"
+pip install "git+https://github.com/YOUR_ORG/backoffice.git#subdirectory=cli"
 
 ### Login
-acct login --email admin@bufferline.com --api-url https://backoffice.yourdomain.com
+acct login --email admin@example.com --api-url https://backoffice.yourdomain.com
 
 ### Monthly Workflow
 1. acct todo summary → check this month's tasks

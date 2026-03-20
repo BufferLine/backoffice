@@ -30,7 +30,7 @@ fi
 echo "[Auth] Logging in..."
 LOGIN_RESP=$(curl -sf -X POST "$API_URL/api/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@bufferline.com","password":"Admin123!"}' 2>&1) || LOGIN_RESP=""
+  -d "{\"email\":\"${TEST_EMAIL:-admin@test.local}\",\"password\":\"${TEST_PASSWORD:-TestPass123!}\"}" 2>&1) || LOGIN_RESP=""
 
 if ! echo "$LOGIN_RESP" | grep -q "access_token"; then
   echo "ERROR: Could not log in. Run scripts/e2e.sh first to create the admin account."
@@ -112,10 +112,10 @@ fi
 echo "[Payroll] Creating demo employee and payroll run..."
 
 EMP=$(api -X POST "$API_URL/api/employees" \
-  -d '{"name":"Sangwon Seo","email":"sangwon@bufferline.com","base_salary":"9500","salary_currency":"SGD","start_date":"2026-01-01","work_pass_type":"EP","tax_residency":"SG"}')
+  -d "{\"name\":\"${TEST_EMPLOYEE:-Test Employee}\",\"email\":\"user@example.com\",\"base_salary\":\"9500\",\"salary_currency\":\"SGD\",\"start_date\":\"2026-01-01\",\"work_pass_type\":\"EP\",\"tax_residency\":\"SG\"}")
 EMP_ID=$(echo "$EMP" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])" 2>/dev/null || echo "")
 if [ -n "$EMP_ID" ]; then
-  echo "  Created employee: Sangwon Seo ($EMP_ID)"
+  echo "  Created employee: ${TEST_EMPLOYEE:-Test Employee} ($EMP_ID)"
 
   # Full month payroll (Feb)
   PAY=$(api -X POST "$API_URL/api/payroll/runs" \
@@ -177,7 +177,7 @@ if [ -n "$ACCT_ID" ]; then
 
   # Salary outflow
   api -X POST "$API_URL/api/transactions" \
-    -d "{\"account_id\":\"$ACCT_ID\",\"direction\":\"out\",\"amount\":\"9500\",\"currency\":\"SGD\",\"tx_date\":\"2026-02-28\",\"category\":\"salary\",\"status\":\"confirmed\",\"counterparty\":\"Sangwon Seo\",\"description\":\"Feb 2026 salary\"}" >/dev/null
+    -d "{\"account_id\":\"$ACCT_ID\",\"direction\":\"out\",\"amount\":\"9500\",\"currency\":\"SGD\",\"tx_date\":\"2026-02-28\",\"category\":\"salary\",\"status\":\"confirmed\",\"counterparty\":\"${TEST_EMPLOYEE:-Test Employee}\",\"description\":\"Feb 2026 salary\"}" >/dev/null
   echo "  Created outflow transaction: SGD 9,500 (salary)"
 
   # AWS expense

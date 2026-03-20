@@ -53,7 +53,7 @@ pass "Server health"
 echo ""
 echo "[1. Onboarding]"
 
-INIT_OUTPUT=$(acct_run init --company-name "Bufferline Pte Ltd" --jurisdiction SG --uen 202412345A --api-url "$API_URL")
+INIT_OUTPUT=$(acct_run init --company-name "${TEST_COMPANY:-Test Company Pte Ltd}" --jurisdiction SG --uen "${TEST_UEN:-000000000X}" --api-url "$API_URL")
 
 if echo "$INIT_OUTPUT" | grep -qi "initialized\|setup"; then
   pass "acct init"
@@ -66,7 +66,7 @@ if echo "$INIT_OUTPUT" | grep -qi "initialized\|setup"; then
 
   COMPLETE_RESP=$(curl -sf -X POST "$API_URL/api/setup/complete" \
     -H "Content-Type: application/json" \
-    -d "{\"token\":\"$TOKEN\",\"email\":\"admin@bufferline.com\",\"password\":\"Admin123!\",\"name\":\"Admin User\"}" 2>&1) || COMPLETE_RESP=""
+    -d "{\"token\":\"$TOKEN\",\"email\":\"${TEST_EMAIL:-admin@test.local}\",\"password\":\"${TEST_PASSWORD:-TestPass123!}\",\"name\":\"Admin User\"}" 2>&1) || COMPLETE_RESP=""
 
   if echo "$COMPLETE_RESP" | grep -q "access_token"; then
     pass "Admin account created (via browser — simulated with curl)"
@@ -86,7 +86,7 @@ fi
 echo ""
 echo "[2. CLI Auth]"
 
-OUTPUT=$(acct_run login --email admin@bufferline.com --password "Admin123!" --api-url "$API_URL")
+OUTPUT=$(acct_run login --email "${TEST_EMAIL:-admin@test.local}" --password "${TEST_PASSWORD:-TestPass123!}" --api-url "$API_URL")
 if echo "$OUTPUT" | grep -qi "logged in"; then
   pass "acct login"
 else
@@ -96,7 +96,7 @@ else
 fi
 
 OUTPUT=$(acct_run whoami)
-if echo "$OUTPUT" | grep -q "admin@bufferline.com"; then
+if echo "$OUTPUT" | grep -q "${TEST_EMAIL:-admin@test.local}"; then
   pass "acct whoami"
 else
   fail "acct whoami" "$OUTPUT"
@@ -209,7 +209,7 @@ echo ""
 echo "[5. Employee]"
 
 OUTPUT=$(acct_run employee add \
-  --name "Sangwon Seo" \
+  --name "${TEST_EMPLOYEE:-Test Employee}" \
   --salary 9500 \
   --currency SGD \
   --start-date 2026-03-19 \
@@ -230,7 +230,7 @@ else
 fi
 
 OUTPUT=$(acct_run employee list)
-if echo "$OUTPUT" | grep -q "Sangwon"; then
+if echo "$OUTPUT" | grep -q "${TEST_EMPLOYEE_FIRST:-Test}"; then
   pass "acct employee list"
 else
   fail "acct employee list" "$OUTPUT"

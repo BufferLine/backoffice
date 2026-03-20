@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Create launchd plist
-PLIST_PATH="$HOME/Library/LaunchAgents/com.bufferline.backoffice.plist"
+PLIST_PATH="$HOME/Library/LaunchAgents/com.backoffice.server.plist"
 
 cat > "$PLIST_PATH" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -13,7 +13,7 @@ cat > "$PLIST_PATH" << PLIST
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.bufferline.backoffice</string>
+    <string>com.backoffice.server</string>
     <key>ProgramArguments</key>
     <array>
         <string>${PROJECT_DIR}/backend/.venv/bin/uvicorn</string>

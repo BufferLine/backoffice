@@ -1,4 +1,4 @@
-# Bufferline Backoffice
+# Backoffice
 
 Backoffice operations system for Singapore-based small companies. Automates invoice, payroll, expense, payment tracking, and month-end accountant handoff.
 
@@ -149,4 +149,4 @@ Built-in support for:
 
 ## License
 
-Private — Bufferline Pte Ltd
+MIT

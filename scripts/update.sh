@@ -31,7 +31,7 @@ cd ..
 
 # Restart service
 echo "[4/4] Restarting service..."
-PLIST_PATH="$HOME/Library/LaunchAgents/com.bufferline.backoffice.plist"
+PLIST_PATH="$HOME/Library/LaunchAgents/com.backoffice.server.plist"
 if [ -f "$PLIST_PATH" ]; then
     launchctl unload "$PLIST_PATH" 2>/dev/null || true
     launchctl load "$PLIST_PATH"

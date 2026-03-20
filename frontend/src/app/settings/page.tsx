@@ -143,7 +143,7 @@ export default function SettingsPage() {
     ["Work email", me?.email ?? (loading ? "Loading..." : "Unavailable")],
     ["Department", me?.roles[0]?.name ?? (loading ? "Loading..." : "Finance Operations")],
     ["Reporting line", "Head of Accounting"],
-    ["Default workspace", "Bufferline Singapore"],
+    ["Default workspace", "Your Company"],
     ["Timezone", "GMT+8 Singapore"],
   ] as const;
 

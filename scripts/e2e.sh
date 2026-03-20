@@ -62,7 +62,7 @@ ACCESS_TOKEN=""
 # Try init first
 INIT_RESP=$(curl -sf -X POST "$API_URL/api/setup/init" \
   -H "Content-Type: application/json" \
-  -d '{"company_name":"Bufferline Pte Ltd","jurisdiction":"SG","uen":"202412345A"}' 2>&1) || INIT_RESP=""
+  -d "{\"company_name\":\"${TEST_COMPANY:-Test Company Pte Ltd}\",\"jurisdiction\":\"SG\",\"uen\":\"${TEST_UEN:-000000000X}\"}" 2>&1) || INIT_RESP=""
 
 if echo "$INIT_RESP" | grep -q "setup_url"; then
   pass "System init"
@@ -75,7 +75,7 @@ if echo "$INIT_RESP" | grep -q "setup_url"; then
 
   COMPLETE_RESP=$(curl -sf -X POST "$API_URL/api/setup/complete" \
     -H "Content-Type: application/json" \
-    -d "{\"token\":\"$TOKEN\",\"email\":\"admin@bufferline.com\",\"password\":\"Admin123!\",\"name\":\"Admin User\"}" 2>&1) || COMPLETE_RESP=""
+    -d "{\"token\":\"$TOKEN\",\"email\":\"${TEST_EMAIL:-admin@test.local}\",\"password\":\"${TEST_PASSWORD:-TestPass123!}\",\"name\":\"Admin User\"}" 2>&1) || COMPLETE_RESP=""
 
   if echo "$COMPLETE_RESP" | grep -q "access_token"; then
     pass "Admin account created"
@@ -89,7 +89,7 @@ else
   # System already initialized — try login
   LOGIN_RESP=$(curl -sf -X POST "$API_URL/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d '{"email":"admin@bufferline.com","password":"Admin123!"}' 2>&1) || LOGIN_RESP=""
+    -d "{\"email\":\"${TEST_EMAIL:-admin@test.local}\",\"password\":\"${TEST_PASSWORD:-TestPass123!}\"}" 2>&1) || LOGIN_RESP=""
 
   if echo "$LOGIN_RESP" | grep -q "access_token"; then
     pass "System already initialized, logged in"
@@ -120,7 +120,7 @@ api() {
 echo ""
 echo "[2. Authentication]"
 ME=$(api "$API_URL/api/auth/me")
-check "Get current user"   "echo '$ME'" "admin@bufferline.com"
+check "Get current user"   "echo '$ME'" "${TEST_EMAIL:-admin@test.local}"
 check "Has superadmin role" "echo '$ME'" "superadmin"
 
 # -------------------------------------------------------------------------
@@ -198,9 +198,9 @@ fi  # end CLIENT_ID guard
 echo ""
 echo "[5. Payroll Lifecycle]"
 EMP=$(api -X POST "$API_URL/api/employees" \
-  -d '{"name":"Sangwon Seo","base_salary":"9500","salary_currency":"SGD","start_date":"2026-03-19","work_pass_type":"EP","tax_residency":"SG"}')
+  -d "{\"name\":\"${TEST_EMPLOYEE:-Test Employee}\",\"base_salary\":\"9500\",\"salary_currency\":\"SGD\",\"start_date\":\"2026-03-19\",\"work_pass_type\":\"EP\",\"tax_residency\":\"SG\"}")
 EMP_ID=$(echo "$EMP" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])" 2>/dev/null || echo "")
-check "Create employee" "echo '$EMP'" "Sangwon"
+check "Create employee" "echo '$EMP'" "${TEST_EMPLOYEE_FIRST:-Test}"
 
 if [ -n "$EMP_ID" ]; then
   PAY=$(api -X POST "$API_URL/api/payroll/runs" \
