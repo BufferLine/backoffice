@@ -88,7 +88,7 @@ class AirwallexProvider(
                     "Content-Type": "application/json",
                 },
             )
-        if resp.status_code != 200:
+        if resp.status_code not in (200, 201):
             raise ProviderAPIError(self.name, resp.status_code, resp.text)
         data = resp.json()
         self._token = data["token"]
@@ -175,13 +175,13 @@ class AirwallexProvider(
 
             transactions.append(
                 SyncedTransaction(
-                    source_tx_id=item["financial_transaction_id"],
+                    source_tx_id=item.get("id") or item.get("financial_transaction_id", ""),
                     tx_date=tx_date,
                     amount=Decimal(str(item.get("amount", "0"))),
                     currency=item.get("currency", "USD"),
                     counterparty=item.get("account_name"),
-                    reference=item.get("batch_booking_id"),
-                    description=item.get("short_name") or item.get("transaction_type"),
+                    reference=item.get("source_id") or item.get("batch_booking_id"),
+                    description=item.get("description") or item.get("transaction_type"),
                     raw_data=item,
                 )
             )
