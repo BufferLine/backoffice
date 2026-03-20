@@ -36,9 +36,9 @@ Modular integration architecture: each provider is a plugin with API client, web
 ### Phase 1 — Quick Wins (Low effort, high value)
 
 #### PayNow SGQR Fix
-- [ ] Replace URL-based QR with proper EMVCo/SGQR TLV format
-- [ ] Test with DBS, OCBC, UOB mobile banking apps
-- [ ] Add amount + reference encoding per SGQR spec
+- [x] Replace URL-based QR with proper EMVCo/SGQR TLV format
+- [x] Test with DBS, OCBC, UOB mobile banking apps
+- [x] Add amount + reference encoding per SGQR spec
 
 #### DBS Statement Parser
 - [ ] Add `DBSParser` for DBS iBanking CSV format
@@ -60,13 +60,13 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] `integration_credentials` config pattern (env vars grouped by provider)
 
 #### Airwallex API
-- [ ] API client module (`AIRWALLEX_CLIENT_ID`, `AIRWALLEX_API_KEY` env vars)
-- [ ] Token auth flow (short-lived bearer token from client_id + api_key)
-- [ ] Transaction history sync → `BankTransaction` records (replaces CSV import)
-- [ ] Real-time balance sync → `Account.balance` verification
-- [ ] Webhook receiver: `payment.completed`, `payout.completed` → auto-create transactions
-- [ ] FX rate fetching for `fx_rate_to_sgd` on payments
-- [ ] Payment link generation for international invoice clients
+- [x] API client module (`AIRWALLEX_CLIENT_ID`, `AIRWALLEX_API_KEY` env vars)
+- [x] Token auth flow (short-lived bearer token from client_id + api_key)
+- [x] Transaction history sync → `BankTransaction` records (replaces CSV import)
+- [x] Real-time balance sync → `Account.balance` verification
+- [x] Webhook receiver: `payment.completed`, `payout.completed` → auto-create transactions
+- [x] FX rate fetching for `fx_rate_to_sgd` on payments
+- [x] Payment link generation for international invoice clients
 
 #### Stripe Payment Collection
 - [ ] Stripe Payment Link generation on invoice issue

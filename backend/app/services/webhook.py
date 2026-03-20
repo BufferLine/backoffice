@@ -64,7 +64,7 @@ async def process_webhook(
             )
             return {"status": "duplicate", "event_id": event.event_id}, status.HTTP_200_OK
 
-    # --- Log event (before processing so it's recorded even on failure) ---
+    # --- Log event ---
     db_event = IntegrationEvent(
         provider=provider_name,
         direction="inbound",

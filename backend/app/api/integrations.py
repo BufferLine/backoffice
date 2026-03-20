@@ -9,11 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import AuthenticatedUser, require_permission
 from app.database import get_db
 from app.integrations import get_provider, list_providers
+from app.integrations.base import FXRateProvider, PaymentLinkProvider
 from app.integrations.capabilities import Capability
 from app.models.integration import IntegrationEvent
 from app.schemas.integration import (
+    FXRateRequest,
+    FXRateResponse,
     IntegrationEventListResponse,
     IntegrationEventResponse,
+    PaymentLinkRequest,
+    PaymentLinkResponse,
     ProviderCapabilityInfo,
     ProviderListResponse,
     SyncRequest,
@@ -154,6 +159,68 @@ async def trigger_sync(
         inserted=result.get("inserted", 0),
         skipped=result.get("skipped", 0),
         errors=result.get("errors", 0),
+    )
+
+
+@router.post("/integrations/{provider}/fx-rate", response_model=FXRateResponse)
+async def get_fx_rate(
+    provider: str,
+    data: FXRateRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("integration:read"))],
+) -> FXRateResponse:
+    import app.integrations.providers  # noqa: F401
+
+    try:
+        p = get_provider(provider)
+    except KeyError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown provider: {provider}")
+
+    if not isinstance(p, FXRateProvider):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{provider} does not support FX rates")
+
+    result = await p.fetch_fx_rate(
+        sell_currency=data.sell_currency,
+        buy_currency=data.buy_currency,
+        sell_amount=data.sell_amount,
+        buy_amount=data.buy_amount,
+    )
+    return FXRateResponse(
+        sell_currency=result.sell_currency,
+        buy_currency=result.buy_currency,
+        rate=str(result.rate),
+        inverse_rate=str(result.inverse_rate) if result.inverse_rate else None,
+        valid_until=result.valid_until,
+    )
+
+
+@router.post("/integrations/{provider}/payment-link", response_model=PaymentLinkResponse)
+async def create_payment_link(
+    provider: str,
+    data: PaymentLinkRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("integration:write"))],
+) -> PaymentLinkResponse:
+    import app.integrations.providers  # noqa: F401
+
+    try:
+        p = get_provider(provider)
+    except KeyError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown provider: {provider}")
+
+    if not isinstance(p, PaymentLinkProvider):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"{provider} does not support payment links"
+        )
+
+    result = await p.create_payment_link(
+        amount=data.amount,
+        currency=data.currency,
+        reference=data.reference,
+        metadata=data.metadata,
+    )
+    return PaymentLinkResponse(
+        url=result.url,
+        provider_id=result.provider_id,
+        expires_at=result.expires_at,
     )
 
 

@@ -55,3 +55,31 @@ class TestConnectionResponse(BaseModel):
     provider: str
     status: str
     detail: dict[str, Any] | None = None
+
+
+class FXRateRequest(BaseModel):
+    sell_currency: str
+    buy_currency: str
+    sell_amount: str | None = None
+    buy_amount: str | None = None
+
+
+class FXRateResponse(BaseModel):
+    sell_currency: str
+    buy_currency: str
+    rate: str
+    inverse_rate: str | None = None
+    valid_until: datetime | None = None
+
+
+class PaymentLinkRequest(BaseModel):
+    amount: str
+    currency: str
+    reference: str
+    metadata: dict[str, Any] | None = None
+
+
+class PaymentLinkResponse(BaseModel):
+    url: str
+    provider_id: str
+    expires_at: datetime | None = None
