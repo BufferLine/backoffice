@@ -26,7 +26,7 @@ class SingaporeJurisdiction(JurisdictionBase):
                 amount=sdl_amount,
                 rate=self.SDL_RATE,
                 cap_amount=self.SDL_CAP_LOW if gross_salary <= self.SDL_THRESHOLD else None,
-                metadata={"jurisdiction": "SG"},
+                metadata={"jurisdiction": "SG", "employer_cost": True},
             )
         )
 
