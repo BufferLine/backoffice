@@ -224,43 +224,6 @@ async def create_payment_link(
     )
 
 
-@router.get("/integrations/{provider}/events/pending", response_model=IntegrationEventListResponse)
-async def list_pending_events(
-    provider: str,
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("integration:read"))],
-    db: Annotated[AsyncSession, Depends(get_db)],
-    page: Annotated[int, Query(ge=1)] = 1,
-    per_page: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> IntegrationEventListResponse:
-    import app.integrations.providers  # noqa: F401
-
-    try:
-        get_provider(provider)
-    except KeyError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown provider: {provider}")
-
-    query = select(IntegrationEvent).where(
-        IntegrationEvent.provider == provider,
-        IntegrationEvent.status == "pending",
-    )
-
-    count_result = await db.execute(select(func.count()).select_from(query.subquery()))
-    total = count_result.scalar_one()
-
-    query = (
-        query.order_by(IntegrationEvent.created_at.asc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-    )
-    result = await db.execute(query)
-    items = list(result.scalars().all())
-
-    return IntegrationEventListResponse(
-        items=[IntegrationEventResponse.model_validate(e) for e in items],
-        total=total,
-    )
-
-
 @router.get("/integrations/{provider}/events", response_model=IntegrationEventListResponse)
 async def list_integration_events(
     provider: str,
