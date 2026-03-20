@@ -117,14 +117,22 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] Agent escalates tasks it cannot handle to human
 
 ### Invoice
+- [ ] Customizable invoice number format (prefix, padding, reset period)
 - [ ] Client attention/contact person field
 - [ ] Custom notes/terms section per invoice
 - [ ] Credit note support
 
 ### Payroll
+- [ ] Customizable payslip number format (prefix, padding, reset period)
 - [ ] CPF rate table in DB (by age band, no code changes needed)
 - [ ] SDL/CPF rate updates without code deployment
 - [ ] Multi-jurisdiction payroll module (e.g. Korea)
+
+### Shareholder Loan
+- [ ] Director/shareholder loan ledger (drawdown, repayment, interest)
+- [ ] Loan agreement PDF generation (terms, schedule, signatures)
+- [ ] Interest calculation (simple/compound, configurable rate)
+- [ ] Repayment schedule tracking with reminders
 
 ### Payment Methods
 - [ ] Validation: bank type requires bank fields, crypto requires wallet
