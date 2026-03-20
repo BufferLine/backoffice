@@ -101,16 +101,17 @@ async def test_payroll_proration(client: AsyncClient, auth_headers: dict):
 
 @pytest.mark.asyncio
 async def test_payroll_sdl_deduction_exists(client: AsyncClient, auth_headers: dict):
-    """Verify SDL deduction is present in the payroll run."""
+    """Verify SDL deduction is present in the payroll run (as employer cost)."""
     resp = await client.get(f"/api/payroll/runs/{_payroll_run_id}", headers=auth_headers)
     body = resp.json()
-    deductions = body.get("deductions", [])
-    assert len(deductions) > 0, "Payroll run should have deductions"
+    # SDL is an employer cost, not an employee deduction
+    employer_costs = body.get("employer_costs", [])
+    assert len(employer_costs) > 0, "Payroll run should have employer costs"
 
-    deduction_types = [d["deduction_type"] for d in deductions]
-    assert "sdl" in deduction_types, f"SDL deduction not found. Deductions: {deduction_types}"
+    cost_types = [d["deduction_type"] for d in employer_costs]
+    assert "sdl" in cost_types, f"SDL not found in employer costs. Types: {cost_types}"
 
-    sdl = next(d for d in deductions if d["deduction_type"] == "sdl")
+    sdl = next(d for d in employer_costs if d["deduction_type"] == "sdl")
     sdl_amount = Decimal(sdl["amount"])
     # SDL = 0.25% of prorated_gross, capped at 11.25
     prorated = Decimal("9200") * Decimal("13") / Decimal("31")
@@ -118,6 +119,42 @@ async def test_payroll_sdl_deduction_exists(client: AsyncClient, auth_headers: d
     assert abs(sdl_amount - expected_sdl) < Decimal("0.02"), (
         f"SDL amount {sdl_amount} doesn't match expected ~{expected_sdl:.2f}"
     )
+
+
+@pytest.mark.asyncio
+async def test_payroll_no_cpf_for_ep_holder(client: AsyncClient, auth_headers: dict):
+    """EP holders should not have CPF deductions (only citizens/PRs get CPF)."""
+    resp = await client.get(f"/api/payroll/runs/{_payroll_run_id}", headers=auth_headers)
+    body = resp.json()
+    all_types = [d["deduction_type"] for d in body.get("deductions", [])]
+    all_types += [d["deduction_type"] for d in body.get("employer_costs", [])]
+    assert "cpf_employee" not in all_types, "EP holder should not have CPF employee deduction"
+    assert "cpf_employer" not in all_types, "EP holder should not have CPF employer cost"
+
+
+@pytest.mark.asyncio
+async def test_payroll_deductions_have_required_fields(client: AsyncClient, auth_headers: dict):
+    """All deductions/employer_costs should have required fields populated."""
+    resp = await client.get(f"/api/payroll/runs/{_payroll_run_id}", headers=auth_headers)
+    body = resp.json()
+    for d in body.get("employer_costs", []) + body.get("deductions", []):
+        assert "deduction_type" in d, "Missing deduction_type"
+        assert "amount" in d, "Missing amount"
+        assert "description" in d, "Missing description"
+        assert float(d["amount"]) >= 0, f"Negative deduction amount: {d['amount']}"
+
+
+@pytest.mark.asyncio
+async def test_payroll_net_salary_equals_gross_minus_deductions(client: AsyncClient, auth_headers: dict):
+    """Net salary = prorated gross - employee deductions (not employer costs)."""
+    resp = await client.get(f"/api/payroll/runs/{_payroll_run_id}", headers=auth_headers)
+    body = resp.json()
+    gross = Decimal(body["prorated_gross_salary"])
+    net = Decimal(body["net_salary"])
+    total_deductions = Decimal(body["total_deductions"])
+    # EP holder: no employee deductions, so net == gross
+    assert total_deductions == Decimal("0"), f"EP holder should have 0 employee deductions, got {total_deductions}"
+    assert net == gross, f"Net {net} should equal gross {gross} for EP holder with no employee deductions"
 
 
 @pytest.mark.asyncio

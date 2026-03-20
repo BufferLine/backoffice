@@ -86,9 +86,9 @@ async def recalculate_totals(db: AsyncSession, invoice: Invoice) -> None:
                     rate = Decimal(str(item.tax_rate)) if item.tax_rate is not None else company_gst_rate
                     item_amount = Decimal(str(item.amount))
                     if invoice.tax_inclusive:
-                        item_tax = (item_amount * rate / (1 + rate)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+                        item_tax = (item_amount * rate / (1 + rate)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                     else:
-                        item_tax = (item_amount * rate).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+                        item_tax = (item_amount * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                     item.tax_amount = float(item_tax)
                     total_tax += item_tax
 
@@ -430,6 +430,7 @@ async def issue_invoice(
     )
 
     from app.services.task import create_action_todo
+    await db.refresh(invoice, ["client"])
     client_name = invoice.client.legal_name if invoice.client else str(invoice.client_id)
     await create_action_todo(
         db,

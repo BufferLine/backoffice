@@ -8,6 +8,7 @@ from app.api import auth, automation, bank_reconciliation, changelog, clients, e
 from app.api import settings as settings_router
 from app.api import accounts, transactions, recurring_commitments
 from app.api import payment_methods
+from app.api import integrations as integrations_router
 from app.api.payroll import employees_router
 from app.database import AsyncSessionLocal
 from app.services.auth import seed_permissions, seed_roles
@@ -55,8 +56,17 @@ async def lifespan(app: FastAPI):
         except Exception:
             await session.rollback()
             raise
+
+    if settings.ENABLE_SYNC_SCHEDULER:
+        from app.scheduler import start_scheduler
+        await start_scheduler()
+
     yield
+
     # Shutdown
+    if settings.ENABLE_SYNC_SCHEDULER:
+        from app.scheduler import stop_scheduler
+        await stop_scheduler()
 
 
 app = FastAPI(
@@ -94,6 +104,7 @@ app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(recurring_commitments.router, prefix="/api/recurring-commitments", tags=["recurring-commitments"])
 app.include_router(payment_methods.router, prefix="/api/payment-methods", tags=["payment-methods"])
+app.include_router(integrations_router.router, prefix="/api", tags=["integrations"])
 
 
 @app.get("/health")

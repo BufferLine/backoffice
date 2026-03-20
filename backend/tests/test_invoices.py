@@ -154,14 +154,13 @@ async def test_issue_invoice(client: AsyncClient, auth_headers: dict):
 
 
 @pytest.mark.asyncio
-async def test_issue_same_invoice_idempotent(client: AsyncClient, auth_headers: dict):
-    """Issuing an already-issued invoice should succeed (idempotent)."""
+async def test_issue_same_invoice_returns_conflict(client: AsyncClient, auth_headers: dict):
+    """Issuing an already-issued invoice should return 409 (invalid transition)."""
     resp = await client.post(
         f"/api/invoices/{_invoice_id}/issue",
         headers=auth_headers,
     )
-    assert resp.status_code == 200, f"Idempotent issue failed: {resp.status_code}: {resp.text}"
-    assert resp.json()["status"] == "issued"
+    assert resp.status_code == 409, f"Expected 409 for re-issue, got {resp.status_code}: {resp.text}"
 
 
 @pytest.mark.asyncio
