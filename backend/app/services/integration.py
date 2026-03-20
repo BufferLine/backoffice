@@ -96,100 +96,123 @@ async def _sync_transactions(
     provider_name: str,
     provider: TransactionSyncProvider,
 ) -> dict:
-    """Sync transactions for a provider. Maps accounts via Account.statement_source."""
+    """Sync transactions for a provider. Maps accounts via Account.statement_source.
+
+    Iterates over each linked account separately so that transactions are
+    assigned to the correct account and sync cursors are tracked per-account.
+    Falls back to a single account_id=None sync if no accounts are linked.
+    """
 
     # Find accounts linked to this provider
     result = await db.execute(
         select(Account).where(Account.statement_source == provider_name, Account.is_active == True)  # noqa: E712
     )
-    accounts = result.scalars().all()
-    account_id: uuid.UUID | None = accounts[0].id if accounts else None
+    accounts = list(result.scalars().all())
 
-    state = await _get_or_create_sync_state(db, provider_name, Capability.SYNC_TRANSACTIONS, account_id)
+    # Build list of (account_id, currency) pairs to sync; None if no accounts linked
+    sync_targets: list[tuple[uuid.UUID | None, str | None]] = (
+        [(a.id, a.currency) for a in accounts] if accounts else [(None, None)]
+    )
 
-    if state.consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
-        logger.warning(
-            "Skipping %s sync_transactions: %d consecutive failures",
-            provider_name,
-            state.consecutive_failures,
-        )
-        return {"inserted": 0, "skipped": 0, "errors": state.consecutive_failures}
+    total_inserted = 0
+    total_skipped = 0
+    total_errors = 0
 
-    inserted = 0
-    skipped = 0
-    errors = 0
-    cursor = state.last_cursor
-    since = state.last_synced_at.isoformat() if state.last_synced_at else None
+    for account_id, account_currency in sync_targets:
+        state = await _get_or_create_sync_state(db, provider_name, Capability.SYNC_TRANSACTIONS, account_id)
 
-    try:
-        while True:
-            transactions, next_cursor = await provider.sync_transactions(since=since, cursor=cursor)
+        if state.consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+            logger.warning(
+                "Skipping %s sync_transactions for account %s: %d consecutive failures",
+                provider_name,
+                account_id,
+                state.consecutive_failures,
+            )
+            total_errors += state.consecutive_failures
+            continue
 
-            for tx in transactions:
-                stmt = (
-                    pg_insert(BankTransaction)
-                    .values(
-                        id=uuid.uuid4(),
-                        source=provider_name,
-                        source_tx_id=tx.source_tx_id,
-                        tx_date=tx.tx_date,
-                        amount=tx.amount,
-                        currency=tx.currency,
-                        counterparty=tx.counterparty,
-                        reference=tx.reference,
-                        description=tx.description,
-                        match_status="unmatched",
-                        raw_data_json=tx.raw_data,
-                        account_id=account_id,
+        inserted = 0
+        skipped = 0
+        cursor = state.last_cursor
+        since = state.last_synced_at.isoformat() if state.last_synced_at else None
+
+        try:
+            while True:
+                transactions, next_cursor = await provider.sync_transactions(since=since, cursor=cursor)
+
+                for tx in transactions:
+                    # Skip transactions that don't match this account's currency
+                    if account_currency and tx.currency != account_currency:
+                        continue
+
+                    stmt = (
+                        pg_insert(BankTransaction)
+                        .values(
+                            id=uuid.uuid4(),
+                            source=provider_name,
+                            source_tx_id=tx.source_tx_id,
+                            tx_date=tx.tx_date,
+                            amount=tx.amount,
+                            currency=tx.currency,
+                            counterparty=tx.counterparty,
+                            reference=tx.reference,
+                            description=tx.description,
+                            match_status="unmatched",
+                            raw_data_json=tx.raw_data,
+                            account_id=account_id,
+                        )
+                        .on_conflict_do_nothing(
+                            constraint="uq_bank_transactions_source_tx"
+                        )
                     )
-                    .on_conflict_do_nothing(
-                        constraint="uq_bank_transactions_source_tx"
-                    )
-                )
-                result = await db.execute(stmt)
-                if result.rowcount and result.rowcount > 0:
-                    inserted += 1
-                else:
-                    skipped += 1
+                    result = await db.execute(stmt)
+                    if result.rowcount and result.rowcount > 0:
+                        inserted += 1
+                    else:
+                        skipped += 1
 
-            state.last_cursor = next_cursor
+                state.last_cursor = next_cursor
+                await db.flush()
+
+                if next_cursor is None:
+                    break
+                cursor = next_cursor
+
+            state.last_synced_at = datetime.now(timezone.utc)
+            state.consecutive_failures = 0
+            state.last_error = None
             await db.flush()
 
-            if next_cursor is None:
-                break
-            cursor = next_cursor
+            total_inserted += inserted
+            total_skipped += skipped
 
-        state.last_synced_at = datetime.now(timezone.utc)
-        state.consecutive_failures = 0
-        state.last_error = None
-        await db.flush()
+        except Exception as exc:
+            total_errors += 1
+            state.consecutive_failures += 1
+            state.last_error = str(exc)
+            await db.flush()
 
+            await _log_event(
+                db,
+                provider_name,
+                "outbound",
+                "sync_transactions",
+                "failed",
+                error_message=f"account={account_id}: {exc}",
+            )
+            logger.exception("Error syncing transactions for %s account %s", provider_name, account_id)
+
+    if total_errors == 0:
         await _log_event(
             db,
             provider_name,
             "outbound",
             "sync_transactions",
             "processed",
-            result_json={"inserted": inserted, "skipped": skipped},
+            result_json={"inserted": total_inserted, "skipped": total_skipped, "accounts": len(sync_targets)},
         )
 
-    except Exception as exc:
-        errors += 1
-        state.consecutive_failures += 1
-        state.last_error = str(exc)
-        await db.flush()
-
-        await _log_event(
-            db,
-            provider_name,
-            "outbound",
-            "sync_transactions",
-            "failed",
-            error_message=str(exc),
-        )
-        logger.exception("Error syncing transactions for %s", provider_name)
-
-    return {"inserted": inserted, "skipped": skipped, "errors": errors}
+    return {"inserted": total_inserted, "skipped": total_skipped, "errors": total_errors}
 
 
 async def _sync_balances(

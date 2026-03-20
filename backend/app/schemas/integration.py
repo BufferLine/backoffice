@@ -36,6 +36,7 @@ class ProviderCapabilityInfo(BaseModel):
 
 class ProviderListResponse(BaseModel):
     providers: list[ProviderCapabilityInfo]
+    total: int = 0
 
 
 class SyncRequest(BaseModel):

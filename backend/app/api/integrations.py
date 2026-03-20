@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,12 +75,12 @@ async def list_integrations(
             ProviderCapabilityInfo(
                 name=p.name,
                 display_name=p.display_name,
-                capabilities=[c.value for c in p.capabilities],
+                capabilities=list(p.capabilities),
                 configured=configured,
             )
         )
 
-    return ProviderListResponse(providers=providers)
+    return ProviderListResponse(providers=providers, total=len(providers))
 
 
 @router.get("/integrations/{provider}", response_model=ProviderCapabilityInfo)
@@ -104,7 +104,7 @@ async def get_integration(
     return ProviderCapabilityInfo(
         name=p.name,
         display_name=p.display_name,
-        capabilities=[c.value for c in p.capabilities],
+        capabilities=list(p.capabilities),
         configured=configured,
     )
 
@@ -162,8 +162,8 @@ async def list_integration_events(
     provider: str,
     current_user: Annotated[AuthenticatedUser, Depends(require_permission("integration:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
-    page: int = 1,
-    per_page: int = 20,
+    page: Annotated[int, Query(ge=1)] = 1,
+    per_page: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> IntegrationEventListResponse:
     import app.integrations.providers  # noqa: F401
 
