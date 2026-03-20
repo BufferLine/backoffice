@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { AuthTokens } from "@/lib/types";
 
 export default function SetupPage() {
+  return (
+    <Suspense>
+      <SetupForm />
+    </Suspense>
+  );
+}
+
+function SetupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
