@@ -1,61 +1,67 @@
-# Backoffice Roadmap
+# Roadmap
 
 ## Completed
 
-- [x] Todo auto-generation: payroll finalize, invoice issue, overdue follow-up
-- [x] Todo list/upcoming auto-generates instances for current month
-- [x] Export validate CLI 405 fix
-- [x] Multi payment method per invoice (join table)
+- [x] Invoice CRUD + PDF generation with company stamp/logo/branding
+- [x] Payroll with proration, SDL/CPF, payslip PDF
+- [x] Expense tracking with state machine (draft → confirmed → reimbursed)
+- [x] Payment recording (bank + crypto) with invoice/payroll linking
+- [x] Bank statement import + auto-match reconciliation
+- [x] Account balance tracking (accounts + transactions ledger)
+- [x] Recurring commitments (subscriptions, rent)
+- [x] Month-end export pack (ZIP with CSVs + PDFs + manifest)
+- [x] Todo/task system with Singapore compliance calendar (10 templates)
+- [x] Todo auto-generation on business events (invoice issue, payroll finalize, overdue)
+- [x] Field-level change log tracking
+- [x] Multi payment method per invoice
 - [x] Per-line-item tax code (SR/ZR/ES/NT) with rate override
-- [x] GST breakdown by rate in invoice PDF
-- [x] GST Registration Number + Website in company settings
 - [x] PayNow QR code generation on invoice PDF
-- [x] Fix empty 2nd page on PDF (footer/stamp overflow)
-- [x] File download API (GET /api/files/{id}/download)
-- [x] Company logo on payslip
+- [x] Payment methods registry (bank/crypto/PayNow) with nickname
+- [x] GST inclusive/exclusive pricing
+- [x] Company branding (logo, stamp, color theme, font)
+- [x] File download API + CLI
+- [x] Payroll delete/edit/regenerate PDF
+- [x] Onboarding flow (CLI + browser, or CLI-only with --admin-email)
+- [x] JWT + API token auth with domain-based RBAC
+- [x] Docker Compose production (backend + frontend + nginx + cloudflared)
+- [x] Supabase DB + Cloudflare R2 storage support
+- [x] Comprehensive documentation (onboarding, CLI guide, server setup, architecture)
 
-## Todo System (Agent Task Queue)
+## Up Next
 
 ### Agent Integration
-- [ ] Agent가 todo list 조회 → 실행 가능한 task 순서대로 처리
-- [ ] Task complete 시 실행 결과 note로 기록
-- [ ] Agent가 처리 못하는 task는 사람에게 알림
+- [ ] Agent reads todo list and executes tasks in order
+- [ ] Task completion records execution result as note
+- [ ] Agent escalates tasks it cannot handle to human
 
-## Invoice
-
-### Template Polish
+### Invoice
 - [ ] Client attention/contact person field
-- [ ] Invoice notes/terms section (custom per invoice)
+- [ ] Custom notes/terms section per invoice
 - [ ] Credit note support
 
-## Payroll
+### Payroll
+- [ ] CPF rate table in DB (by age band, no code changes needed)
+- [ ] SDL/CPF rate updates without code deployment
+- [ ] Multi-jurisdiction payroll module (e.g. Korea)
 
-- [ ] CPF rate table DB화 (age band별)
-- [ ] SDL/CPF rate 변경 시 코드 수정 불필요하게
-- [ ] Multi-jurisdiction payroll module (KR 등)
-
-## Payment Methods
-
+### Payment Methods
 - [ ] PayNow QR end-to-end test
-- [ ] Payment method validation (bank requires bank fields, crypto requires wallet)
+- [ ] Validation: bank type requires bank fields, crypto requires wallet
 
-## Accounts / Balance
-
-- [ ] Dashboard: monthly cashflow chart (in/out by category)
+### Accounts & Balance
+- [ ] Monthly cashflow chart (inflow/outflow by category)
 - [ ] Auto-create transaction when payment is linked
 - [ ] Recurring commitment → pending transaction auto-match with bank import
 
-## Frontend
-
-- [ ] Settings: payment method CRUD UI
-- [ ] Settings: company branding preview (logo, stamp, colors)
-- [ ] Invoice: multi payment method selector on create/edit
+### Frontend
+- [ ] Payment method CRUD UI
+- [ ] Company branding preview (logo, stamp, colors)
+- [ ] Invoice: multi payment method selector
 - [ ] Invoice: PDF preview before issuing
-- [ ] Dashboard: KPI cards with real data
+- [ ] Dashboard: KPI cards with live data
 - [ ] Payroll: create/review/finalize flow
 
-## Infrastructure
-
-- [ ] Docker: full stack docker-compose up (backend + frontend)
+### Infrastructure
 - [ ] CI/CD: GitHub Actions for test + lint
-- [ ] Production deployment config
+- [ ] Automated backup strategy
+- [ ] Health check monitoring + alerts
