@@ -11,9 +11,11 @@ scripts/stop.sh           # Stop everything
 ## Onboarding (first run after reset)
 
 ```bash
-acct init --company-name "Company Name" --jurisdiction SG --api-url http://localhost:8000
+acct init --api-url http://localhost:8000
+# → prompts for company name, jurisdiction, UEN
 # → open the printed URL in browser to create admin account
-acct login --email admin@company.com --password <password>
+acct login --email admin@company.com --api-url http://localhost:8000
+# → prompts for password
 ```
 
 ## Testing
@@ -30,7 +32,7 @@ scripts/e2e-cli.sh        # 36 CLI E2E checks (full workflow)
 backend/                  # Python FastAPI + SQLAlchemy
   app/
     api/                  # REST endpoints (~95 endpoints)
-    models/               # SQLAlchemy models (30 tables)
+    models/               # SQLAlchemy models (31 tables)
     schemas/              # Pydantic request/response schemas
     services/             # Business logic
     state_machines/       # Invoice, payroll, expense state transitions
