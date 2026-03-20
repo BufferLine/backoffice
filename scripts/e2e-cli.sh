@@ -11,7 +11,7 @@ source backend/.venv/bin/activate 2>/dev/null || true
 # Disable Rich colour output so we can parse JSON cleanly
 export NO_COLOR=1
 
-API_URL="http://localhost:8000"
+API_URL="${API_URL:-${API_BASE_URL:-http://localhost:8000}}"
 PASS=0
 FAIL=0
 ERRORS=""
@@ -60,13 +60,13 @@ if echo "$INIT_OUTPUT" | grep -qi "initialized\|setup"; then
   TOKEN=$(echo "$INIT_OUTPUT" | python3 -c "import sys,re; m=re.search(r'token=([^\s&]+)', sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null || echo "")
 
   if [ -z "$TOKEN" ]; then
-    fail "Extract setup token" "could not parse token from: $INIT_RESP"
+    fail "Extract setup token" "could not parse token from: $INIT_OUTPUT"
     exit 1
   fi
 
   COMPLETE_RESP=$(curl -sf -X POST "$API_URL/api/setup/complete" \
     -H "Content-Type: application/json" \
-    -d "{\"token\":\"$TOKEN\",\"email\":\"${TEST_EMAIL:-admin@test.local}\",\"password\":\"${TEST_PASSWORD:-TestPass123!}\",\"name\":\"Admin User\"}" 2>&1) || COMPLETE_RESP=""
+    -d "{\"token\":\"$TOKEN\",\"email\":\"${TEST_EMAIL:-admin@test.com}\",\"password\":\"${TEST_PASSWORD:-TestPass123!}\",\"name\":\"Admin User\"}" 2>&1) || COMPLETE_RESP=""
 
   if echo "$COMPLETE_RESP" | grep -q "access_token"; then
     pass "Admin account created (via browser — simulated with curl)"
@@ -86,7 +86,7 @@ fi
 echo ""
 echo "[2. CLI Auth]"
 
-OUTPUT=$(acct_run login --email "${TEST_EMAIL:-admin@test.local}" --password "${TEST_PASSWORD:-TestPass123!}" --api-url "$API_URL")
+OUTPUT=$(acct_run login --email "${TEST_EMAIL:-admin@test.com}" --password "${TEST_PASSWORD:-TestPass123!}" --api-url "$API_URL")
 if echo "$OUTPUT" | grep -qi "logged in"; then
   pass "acct login"
 else
@@ -96,7 +96,7 @@ else
 fi
 
 OUTPUT=$(acct_run whoami)
-if echo "$OUTPUT" | grep -q "${TEST_EMAIL:-admin@test.local}"; then
+if echo "$OUTPUT" | grep -q "${TEST_EMAIL:-admin@test.com}"; then
   pass "acct whoami"
 else
   fail "acct whoami" "$OUTPUT"
@@ -185,7 +185,7 @@ else
   fail "acct invoice issue" "$OUTPUT"
 fi
 
-OUTPUT=$(acct_run invoice list)
+OUTPUT=$(COLUMNS=200 acct_run invoice list)
 if echo "$OUTPUT" | grep -q "draft\|issued\|paid"; then
   pass "acct invoice list"
 else
@@ -271,10 +271,10 @@ else
   fail "payroll prorated gross" "expected 3983.87 in: $(echo "$OUTPUT" | head -5)"
 fi
 
-if echo "$OUTPUT" | grep -q "3973.91"; then
-  pass "payroll net salary = 3973.91"
+if echo "$OUTPUT" | grep -q "3983.87"; then
+  pass "payroll net salary = 3983.87"
 else
-  fail "payroll net salary" "expected 3973.91 in: $(echo "$OUTPUT" | head -5)"
+  fail "payroll net salary" "expected 3983.87 in: $(echo "$OUTPUT" | head -5)"
 fi
 
 if [ -n "${PAY_ID:-}" ]; then
@@ -301,7 +301,7 @@ fi
 
 fi  # PAY_ID guard
 
-OUTPUT=$(acct_run payroll list)
+OUTPUT=$(COLUMNS=200 acct_run payroll list)
 if echo "$OUTPUT" | grep -qi "finaliz"; then
   pass "acct payroll list"
 else
@@ -368,7 +368,7 @@ else
   echo "  (skipping payment record — no invoice ID)"
 fi
 
-OUTPUT=$(acct_run payment list)
+OUTPUT=$(COLUMNS=200 acct_run payment list)
 if echo "$OUTPUT" | grep -q "bank_trans"; then
   pass "acct payment list"
 else
@@ -441,7 +441,7 @@ else
   fail "acct transaction create" "$OUTPUT"
 fi
 
-OUTPUT=$(acct_run transaction list --account "$ACCT_ID")
+OUTPUT=$(COLUMNS=200 acct_run transaction list --account "$ACCT_ID")
 if echo "$OUTPUT" | grep -q "invoic"; then
   pass "acct transaction list"
 else

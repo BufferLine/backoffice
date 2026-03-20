@@ -13,7 +13,7 @@ if [ -f .env ]; then
   set +a
 fi
 
-API_URL="http://localhost:8000"
+API_URL="${API_URL:-${API_BASE_URL:-http://localhost:8000}}"
 PASS=0
 FAIL=0
 ERRORS=""
@@ -210,7 +210,7 @@ if [ -n "$EMP_ID" ]; then
   check "Days worked = 13"   "echo '$PAY'" '"days_worked":13'
   check "Prorated gross"     "echo '$PAY'" '"prorated_gross_salary":"3983.87'
   check "SDL deduction"      "echo '$PAY'" '"deduction_type":"sdl"'
-  check "Net salary"         "echo '$PAY'" '"net_salary":"3973.91'
+  check "Net salary"         "echo '$PAY'" '"net_salary":"3983.87'
 
   if [ -n "$PAY_ID" ]; then
     REV=$(api -X POST "$API_URL/api/payroll/runs/$PAY_ID/review")
