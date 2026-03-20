@@ -13,13 +13,17 @@ from app.config import settings
 from app.integrations import register_provider
 from app.integrations.base import (
     BalanceSyncProvider,
+    FXRateProvider,
     IntegrationProvider,
+    PaymentLinkProvider,
     TransactionSyncProvider,
     TransferProvider,
     WebhookProvider,
 )
 from app.integrations.capabilities import (
     BalanceInfo,
+    FXRate,
+    PaymentLinkResult,
     SyncedTransaction,
     TransferResult,
     WebhookEvent,
@@ -39,6 +43,8 @@ class AirwallexProvider(
     BalanceSyncProvider,
     WebhookProvider,
     TransferProvider,
+    FXRateProvider,
+    PaymentLinkProvider,
 ):
     """Airwallex integration provider."""
 
@@ -264,6 +270,81 @@ class AirwallexProvider(
 
     async def _handle_payout_failed(self, event: WebhookEvent) -> dict[str, Any]:
         return {"action": "payout_failed", "event_id": event.event_id}
+
+    # --- FXRateProvider ---
+
+    async def fetch_fx_rate(
+        self,
+        sell_currency: str,
+        buy_currency: str,
+        sell_amount: str | None = None,
+        buy_amount: str | None = None,
+    ) -> FXRate:
+        params: dict[str, Any] = {
+            "sell_currency": sell_currency,
+            "buy_currency": buy_currency,
+        }
+        if sell_amount:
+            params["sell_amount"] = sell_amount
+        if buy_amount:
+            params["buy_amount"] = buy_amount
+
+        data = await self._request("GET", "/api/v1/fx/rates/current", params=params)
+
+        rate = Decimal(str(data.get("client_rate", data.get("rate", "0"))))
+        inverse = data.get("inverse_rate")
+        inverse_rate = Decimal(str(inverse)) if inverse else None
+
+        valid_until: datetime | None = None
+        expiry_str = data.get("valid_to") or data.get("rate_expiry")
+        if expiry_str:
+            try:
+                valid_until = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
+            except ValueError:
+                pass
+
+        return FXRate(
+            sell_currency=sell_currency,
+            buy_currency=buy_currency,
+            rate=rate,
+            inverse_rate=inverse_rate,
+            valid_until=valid_until,
+            raw_data=data,
+        )
+
+    # --- PaymentLinkProvider ---
+
+    async def create_payment_link(
+        self,
+        amount: str,
+        currency: str,
+        reference: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> PaymentLinkResult:
+        payload: dict[str, Any] = {
+            "amount": float(amount),
+            "currency": currency,
+            "title": reference,
+            "reusable": False,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+
+        data = await self._request("POST", "/api/v1/pa/payment_links/create", json=payload)
+
+        expires_at: datetime | None = None
+        expiry_str = data.get("expires_at")
+        if expiry_str:
+            try:
+                expires_at = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
+            except ValueError:
+                pass
+
+        return PaymentLinkResult(
+            url=data["url"],
+            provider_id=data["id"],
+            expires_at=expires_at,
+        )
 
     # --- TransferProvider ---
 

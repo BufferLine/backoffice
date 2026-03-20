@@ -4,6 +4,7 @@ from typing import Any
 from app.integrations.capabilities import (
     BalanceInfo,
     Capability,
+    FXRate,
     PaymentLinkResult,
     PaymentVerification,
     SyncedTransaction,
@@ -45,6 +46,8 @@ class IntegrationProvider(ABC):
             caps.append(Capability.VERIFY_PAYMENT)
         if isinstance(self, AccountingPushProvider):
             caps.append(Capability.PUSH_INVOICE)
+        if isinstance(self, FXRateProvider):
+            caps.append(Capability.FETCH_FX_RATE)
         return caps
 
     def has_capability(self, capability: Capability) -> bool:
@@ -140,6 +143,21 @@ class PaymentVerificationProvider(ABC):
         expected_amount: str | None = None,
         expected_currency: str | None = None,
     ) -> PaymentVerification:
+        ...
+
+
+class FXRateProvider(ABC):
+    """Mixin for providers that support FX rate fetching."""
+
+    @abstractmethod
+    async def fetch_fx_rate(
+        self,
+        sell_currency: str,
+        buy_currency: str,
+        sell_amount: str | None = None,
+        buy_amount: str | None = None,
+    ) -> FXRate:
+        """Fetch current FX rate for a currency pair."""
         ...
 
 

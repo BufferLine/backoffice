@@ -14,6 +14,7 @@ class Capability(str, Enum):
     VERIFY_PAYMENT = "verify_payment"
     PUSH_INVOICE = "push_invoice"
     PUSH_EXPENSE = "push_expense"
+    FETCH_FX_RATE = "fetch_fx_rate"
 
 
 @dataclass
@@ -57,6 +58,16 @@ class PaymentVerification:
     currency: str | None = None
     confirmations: int | None = None
     block_timestamp: datetime | None = None
+
+
+@dataclass
+class FXRate:
+    sell_currency: str
+    buy_currency: str
+    rate: Decimal
+    inverse_rate: Decimal | None = None
+    valid_until: datetime | None = None
+    raw_data: dict | None = None
 
 
 @dataclass
