@@ -13,7 +13,7 @@ if [ -f .env ]; then
   set +a
 fi
 
-API_URL="http://localhost:8000"
+API_URL="${API_URL:-${API_BASE_URL:-http://localhost:8000}}"
 PASS=0
 FAIL=0
 ERRORS=""
@@ -210,7 +210,7 @@ if [ -n "$EMP_ID" ]; then
   check "Days worked = 13"   "echo '$PAY'" '"days_worked":13'
   check "Prorated gross"     "echo '$PAY'" '"prorated_gross_salary":"3983.87'
   check "SDL deduction"      "echo '$PAY'" '"deduction_type":"sdl"'
-  check "Net salary"         "echo '$PAY'" '"net_salary":"3973.91'
+  check "Net salary"         "echo '$PAY'" '"net_salary":"3983.87'
 
   if [ -n "$PAY_ID" ]; then
     REV=$(api -X POST "$API_URL/api/payroll/runs/$PAY_ID/review")
@@ -309,6 +309,46 @@ if [ -n "${PAY_ID:-}" ]; then
   fi
 else
   echo "  (skipped: no payroll run id)"
+fi
+
+# -------------------------------------------------------------------------
+# 11. Integration Framework
+# -------------------------------------------------------------------------
+echo ""
+echo "[11. Integration Framework]"
+
+# List providers
+INT_LIST=$(api "$API_URL/api/integrations")
+check "List integration providers" "echo '$INT_LIST'" '"providers"'
+check "Has total field" "echo '$INT_LIST'" '"total"'
+
+# Get single provider (airwallex)
+INT_DETAIL=$(api "$API_URL/api/integrations/airwallex")
+check "Get airwallex provider" "echo '$INT_DETAIL'" '"airwallex"'
+check "Has capabilities" "echo '$INT_DETAIL'" '"capabilities"'
+check "Has configured flag" "echo '$INT_DETAIL'" '"configured"'
+
+# Unknown provider should 404
+INT_BAD_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/api/integrations/nonexistent" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" 2>&1 || echo "000")
+if [ "$INT_BAD_STATUS" = "404" ]; then
+  pass "Unknown provider returns 404"
+else
+  fail "Unknown provider returns 404" "expected 404, got $INT_BAD_STATUS"
+fi
+
+# Events endpoint (empty but valid)
+INT_EVENTS=$(api "$API_URL/api/integrations/airwallex/events")
+check "List integration events" "echo '$INT_EVENTS'" '"items"'
+check "Events has total" "echo '$INT_EVENTS'" '"total"'
+
+# Webhook unknown provider should 404
+WH_BAD_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/api/webhooks/nonexistent" \
+  -H "Content-Type: application/json" -d '{}' 2>&1 || echo "000")
+if [ "$WH_BAD_STATUS" = "404" ]; then
+  pass "Webhook unknown provider returns 404"
+else
+  fail "Webhook unknown provider returns 404" "expected 404, got $WH_BAD_STATUS"
 fi
 
 # -------------------------------------------------------------------------

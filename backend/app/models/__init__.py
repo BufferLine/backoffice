@@ -19,3 +19,4 @@ from app.models.transaction import Transaction  # noqa: F401
 from app.models.recurring_commitment import RecurringCommitment  # noqa: F401
 from app.models.setup import SetupToken  # noqa: F401
 from app.models.payment_method import PaymentMethod  # noqa: F401
+from app.models.integration import IntegrationEvent, IntegrationSyncState, IntegrationConfig  # noqa: F401

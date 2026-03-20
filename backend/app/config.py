@@ -35,5 +35,16 @@ class Settings(BaseSettings):
     # File uploads
     FILE_MAX_SIZE_BYTES: int = 10485760  # 10 MB
 
+    # Integration framework
+    ENABLE_SYNC_SCHEDULER: bool = False
+    AIRWALLEX_CLIENT_ID: str | None = None
+    AIRWALLEX_API_KEY: str | None = None
+    AIRWALLEX_BASE_URL: str = "https://api.airwallex.com"
+    AIRWALLEX_WEBHOOK_SECRET: str | None = None
+    STRIPE_SECRET_KEY: str | None = None
+    STRIPE_WEBHOOK_SECRET: str | None = None
+    WISE_API_TOKEN: str | None = None
+    ETHERSCAN_API_KEY: str | None = None
+
 
 settings = Settings()

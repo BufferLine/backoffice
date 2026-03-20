@@ -154,14 +154,14 @@ async def test_issue_invoice(client: AsyncClient, auth_headers: dict):
 
 
 @pytest.mark.asyncio
-async def test_issue_same_invoice_idempotent(client: AsyncClient, auth_headers: dict):
-    """Issuing an already-issued invoice should succeed (idempotent)."""
+async def test_issue_same_invoice_returns_conflict(client: AsyncClient, auth_headers: dict):
+    """Issuing an already-issued invoice should return 409 (invalid transition)."""
     resp = await client.post(
         f"/api/invoices/{_invoice_id}/issue",
         headers=auth_headers,
     )
-    assert resp.status_code == 200, f"Idempotent issue failed: {resp.status_code}: {resp.text}"
-    assert resp.json()["status"] == "issued"
+    assert resp.status_code == 409, f"Expected 409 for re-issue, got {resp.status_code}: {resp.text}"
+    assert "Cannot issue" in resp.json()["detail"], "409 should indicate invalid state transition"
 
 
 @pytest.mark.asyncio
@@ -228,6 +228,17 @@ async def test_invoice_is_now_paid(client: AsyncClient, auth_headers: dict):
     resp = await client.get(f"/api/invoices/{_invoice_id}", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["status"] == "paid", "Invoice should be paid after linking payment"
+
+
+@pytest.mark.asyncio
+async def test_cannot_issue_paid_invoice(client: AsyncClient, auth_headers: dict):
+    """Issuing a paid invoice should return 409 (invalid transition)."""
+    resp = await client.post(
+        f"/api/invoices/{_invoice_id}/issue",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409, f"Expected 409 for issuing paid invoice, got {resp.status_code}: {resp.text}"
+    assert "Cannot issue" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
