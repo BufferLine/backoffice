@@ -27,6 +27,88 @@
 - [x] Supabase DB + Cloudflare R2 storage support
 - [x] Comprehensive documentation (onboarding, CLI guide, server setup, architecture)
 
+---
+
+## Integrations
+
+Modular integration architecture: each provider is a plugin with API client, webhook handler, and sync logic. Credentials stored via env vars per provider.
+
+### Phase 1 — Quick Wins (Low effort, high value)
+
+#### PayNow SGQR Fix
+- [ ] Replace URL-based QR with proper EMVCo/SGQR TLV format
+- [ ] Test with DBS, OCBC, UOB mobile banking apps
+- [ ] Add amount + reference encoding per SGQR spec
+
+#### DBS Statement Parser
+- [ ] Add `DBSParser` for DBS iBanking CSV format
+- [ ] Handle both iBanking and IDEAL (corporate) CSV variants
+- [ ] Register in statement_parsers registry
+
+#### Crypto On-chain Verification
+- [ ] Verify `tx_hash` via Etherscan/Polygonscan API after payment recording
+- [ ] Check: transaction exists, amount matches, destination matches, N confirmations
+- [ ] Store verification status on payment record
+- [ ] Support multiple chains via `chain_id` field (Ethereum, Polygon, Arbitrum)
+
+### Phase 2 — Bank API Sync (Medium effort, high value)
+
+#### Integration Infrastructure
+- [ ] Background task scheduler (APScheduler or Celery) for periodic API polling
+- [ ] Webhook receiver framework with signature verification per provider
+- [ ] Rate limiter for outbound API calls (per-provider limits)
+- [ ] `integration_credentials` config pattern (env vars grouped by provider)
+
+#### Airwallex API
+- [ ] API client module (`AIRWALLEX_CLIENT_ID`, `AIRWALLEX_API_KEY` env vars)
+- [ ] Token auth flow (short-lived bearer token from client_id + api_key)
+- [ ] Transaction history sync → `BankTransaction` records (replaces CSV import)
+- [ ] Real-time balance sync → `Account.balance` verification
+- [ ] Webhook receiver: `payment.completed`, `payout.completed` → auto-create transactions
+- [ ] FX rate fetching for `fx_rate_to_sgd` on payments
+- [ ] Payment link generation for international invoice clients
+
+#### Stripe Payment Collection
+- [ ] Stripe Payment Link generation on invoice issue
+- [ ] Embed payment link/button in invoice PDF
+- [ ] Webhook: `payment_intent.succeeded` → auto-mark invoice as paid
+- [ ] Handle partial payments and refunds
+- [ ] Store Stripe payment ID on our payment record
+
+### Phase 3 — Extended Banking (Medium-High effort)
+
+#### Wise Integration
+- [ ] API client (personal API token auth)
+- [ ] Multi-currency balance sync → `Account` records
+- [ ] Transaction history API → `BankTransaction` records
+- [ ] Batch payment for payroll (create quote → recipient → transfer → fund)
+- [ ] Handle SCA (Strong Customer Authentication) approval flow
+- [ ] Webhook: `transfers#state-change`, `balances#credit`
+
+#### Accounting Software Sync
+- [ ] Xero OAuth2 client (token management, browser auth, auto-refresh)
+- [ ] Push invoices to Xero on issue
+- [ ] Push payments to Xero on recording
+- [ ] Push expenses to Xero on confirmation
+- [ ] Map per-line-item tax codes (SR/ZR/ES/NT) to Xero tax rates
+- [ ] QuickBooks Online as alternative (same architecture, different mapping)
+
+### Phase 4 — Advanced (High effort, conditional)
+
+#### DBS RAPID API
+- [ ] mTLS + OAuth2 client credentials (requires DBS corporate relationship)
+- [ ] Real-time balance and transaction notifications
+- [ ] Payment initiation (FAST/GIRO/PayNow)
+- [ ] Only viable for companies qualifying for RAPID access
+
+#### Multi-chain Crypto
+- [ ] Auto-detect incoming stablecoin payments via address monitoring
+- [ ] Alchemy Notify / QuickNode Streams webhooks for wallet activity
+- [ ] Support: Ethereum, Polygon, Arbitrum, Base (configurable per account)
+- [ ] Auto-create `BankTransaction` on detected incoming transfer
+
+---
+
 ## Up Next
 
 ### Agent Integration
@@ -45,7 +127,6 @@
 - [ ] Multi-jurisdiction payroll module (e.g. Korea)
 
 ### Payment Methods
-- [ ] PayNow QR end-to-end test
 - [ ] Validation: bank type requires bank fields, crypto requires wallet
 
 ### Accounts & Balance

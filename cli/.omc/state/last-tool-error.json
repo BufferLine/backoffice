@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd /Users/sangwon0001/Projects/bufferline/backoffice/backend && rm -f alembic/versions/*.py && source .venv/bin/activate && DATABASE_URL=\\\"postgresql+asyncpg://backoffice:devpassword123@lo...",
-  "error": "Exit code 1\n(eval):1: no matches found: alembic/versions/*.py",
-  "timestamp": "2026-03-19T08:45:36.705Z",
-  "retry_count": 1
-}
