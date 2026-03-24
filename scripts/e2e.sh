@@ -278,10 +278,50 @@ else
 fi
 
 # -------------------------------------------------------------------------
-# Step 10: State machine enforcement
+# Step 10: Loan + Payment Allocation
 # -------------------------------------------------------------------------
 echo ""
-echo "[10. Safety Controls]"
+echo "[10. Loan & Payment Allocation]"
+
+LOAN=$(api -X POST "$API_URL/api/loans" \
+  -d '{"loan_type":"shareholder_loan","direction":"inbound","counterparty":"Seo Sangwon","currency":"SGD","principal":"60000","interest_rate":"0","start_date":"2026-03-09","description":"Shareholder loan drawdown"}')
+LOAN_ID=$(echo "$LOAN" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])" 2>/dev/null || echo "")
+check "Create shareholder loan" "echo '$LOAN'" '"status":"active"'
+check "Loan principal = 60000" "echo '$LOAN'" '"principal"'
+
+if [ -n "$LOAN_ID" ]; then
+  LOAN_BAL=$(api "$API_URL/api/loans/$LOAN_ID/balance")
+  check "Loan balance (outstanding)" "echo '$LOAN_BAL'" '"outstanding"'
+
+  # Record a repayment and allocate it to the loan
+  REPAY=$(api -X POST "$API_URL/api/payments" \
+    -d '{"payment_type":"bank_transfer","payment_date":"2026-03-20","currency":"SGD","amount":"5000","bank_reference":"REPAY-001"}')
+  REPAY_ID=$(echo "$REPAY" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])" 2>/dev/null || echo "")
+  check "Record repayment" "echo '$REPAY'" '"payment_type":"bank_transfer"'
+
+  if [ -n "$REPAY_ID" ] && [ -n "$LOAN_ID" ]; then
+    ALLOC=$(api -X POST "$API_URL/api/payments/$REPAY_ID/allocate" \
+      -d "{\"allocations\":[{\"entity_type\":\"loan\",\"entity_id\":\"$LOAN_ID\",\"amount\":\"5000\"}]}")
+    check "Allocate repayment to loan" "echo '$ALLOC'" '"allocations"'
+
+    ALLOC_LIST=$(api "$API_URL/api/payments/$REPAY_ID/allocations")
+    check "List payment allocations" "echo '$ALLOC_LIST'" '"entity_type":"loan"'
+
+    LOAN_BAL2=$(api "$API_URL/api/loans/$LOAN_ID/balance")
+    check "Loan outstanding after repayment" "echo '$LOAN_BAL2'" '"outstanding"'
+  fi
+else
+  fail "Loan ID" "could not parse loan id"
+fi
+
+LOAN_LIST=$(api "$API_URL/api/loans")
+check "List loans" "echo '$LOAN_LIST'" '"items"'
+
+# -------------------------------------------------------------------------
+# Step 11: State machine enforcement
+# -------------------------------------------------------------------------
+echo ""
+echo "[11. Safety Controls]"
 
 if [ -n "${INV_ID:-}" ]; then
   # Try to issue already-paid invoice — should fail with 409
@@ -312,10 +352,10 @@ else
 fi
 
 # -------------------------------------------------------------------------
-# 11. Integration Framework
+# 12. Integration Framework
 # -------------------------------------------------------------------------
 echo ""
-echo "[11. Integration Framework]"
+echo "[12. Integration Framework]"
 
 # List providers
 INT_LIST=$(api "$API_URL/api/integrations")
