@@ -3,11 +3,12 @@
 ## Quick Reference
 
 ```bash
-scripts/ci.sh              # Full CI: unit + soft-reset + API E2E + soft-reset + CLI E2E
-python -m pytest backend/tests/unit/ -v   # Unit tests only (no server needed)
-scripts/soft-reset.sh      # Fast DB reset (drop/recreate + migrations, Docker stays up)
-scripts/e2e.sh             # API E2E only (server must be running, fresh DB)
-scripts/e2e-cli.sh         # CLI E2E only (server must be running, fresh DB)
+scripts/ci.sh                              # Full CI: unit + soft-reset + API E2E + soft-reset + CLI E2E
+python -m pytest backend/tests/unit/ -v    # Unit tests only (no server needed)
+scripts/soft-reset.sh                      # Fast DB reset (drop/recreate + migrations, Docker stays up)
+scripts/e2e.sh                             # API E2E only (server must be running, fresh DB)
+scripts/e2e-cli.sh                         # CLI E2E only (server must be running, fresh DB)
+python scripts/generate-samples.py --open  # Generate + open all sample PDFs for visual QA
 ```
 
 ## Test Tiers
@@ -118,3 +119,25 @@ python -m pytest backend/tests/unit/ --cov=backend/app --cov-report=term-missing
 ```
 
 Target: 100% on pure logic modules (state machines, jurisdiction, parsers, schemas).
+
+## Visual QA — Document Samples
+
+PDF templates can only be fully verified visually. WeasyPrint has layout quirks (especially with flexbox and page breaks) that don't show up in unit tests.
+
+```bash
+python scripts/generate-samples.py          # generate to /tmp/backoffice-samples/
+python scripts/generate-samples.py --open   # generate and open in default viewer
+python scripts/generate-samples.py --ci     # CI mode: verify non-zero output
+```
+
+Generates 5 sample PDFs with realistic data (no DB required):
+
+| Document | File | What to check |
+|----------|------|---------------|
+| Invoice | `invoice-sample.pdf` | Line items, mixed tax codes (SR/ZR), GST breakdown, PayNow QR, stamp |
+| Payslip | `payslip-sample.pdf` | Earnings, CPF employee deduction, employer costs separate, net pay |
+| Loan Agreement | `loan-agreement-sample.pdf` | Terms, signature blocks side-by-side, stamp, immutable notice |
+| Loan Statement | `loan-statement-sample.pdf` | Repayment history, outstanding balance, no signatures |
+| Loan Discharge | `loan-discharge-sample.pdf` | Full repayment confirmed, signature blocks, stamp |
+
+**When to run**: After any change to `backend/app/templates/*.html` or `backend/app/services/pdf.py`.
