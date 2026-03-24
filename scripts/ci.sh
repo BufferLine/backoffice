@@ -22,6 +22,17 @@ echo "========================================="
 echo "  Backoffice CI Pipeline"
 echo "========================================="
 
+# Use soft-reset between E2E runs (fast: DB-only, no Docker restart).
+# Falls back to full reset.sh if Docker isn't running yet.
+soft_reset() {
+  if docker compose exec -T db pg_isready -U backoffice >/dev/null 2>&1; then
+    bash scripts/soft-reset.sh
+  else
+    echo "Docker not running — doing full reset..."
+    bash scripts/reset.sh
+  fi
+}
+
 # ── Phase 1: Unit Tests (no server needed) ──
 step "Phase 1: Unit Tests"
 if python -m pytest backend/tests/unit/ -q --tb=short 2>&1; then
@@ -30,10 +41,9 @@ else
   err "Unit tests failed"
 fi
 
-# ── Phase 2: Reset + API E2E ──
-step "Phase 2: Reset → API E2E"
-echo "Resetting environment..."
-bash scripts/reset.sh > /dev/null 2>&1
+# ── Phase 2: Soft Reset + API E2E ──
+step "Phase 2: Soft Reset → API E2E"
+soft_reset
 
 if curl -sf http://localhost:8000/health | grep -q '"status":"ok"'; then
   ok "Server healthy"
@@ -49,10 +59,9 @@ else
   err "API E2E failed"
 fi
 
-# ── Phase 3: Reset + CLI E2E ──
-step "Phase 3: Reset → CLI E2E"
-echo "Resetting environment..."
-bash scripts/reset.sh > /dev/null 2>&1
+# ── Phase 3: Soft Reset + CLI E2E ──
+step "Phase 3: Soft Reset → CLI E2E"
+soft_reset
 
 if curl -sf http://localhost:8000/health | grep -q '"status":"ok"'; then
   ok "Server healthy"

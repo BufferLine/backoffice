@@ -3,8 +3,9 @@
 ## Quick Reference
 
 ```bash
-scripts/ci.sh              # Full CI: unit + reset + API E2E + reset + CLI E2E
+scripts/ci.sh              # Full CI: unit + soft-reset + API E2E + soft-reset + CLI E2E
 python -m pytest backend/tests/unit/ -v   # Unit tests only (no server needed)
+scripts/soft-reset.sh      # Fast DB reset (drop/recreate + migrations, Docker stays up)
 scripts/e2e.sh             # API E2E only (server must be running, fresh DB)
 scripts/e2e-cli.sh         # CLI E2E only (server must be running, fresh DB)
 ```
