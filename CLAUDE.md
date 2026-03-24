@@ -87,6 +87,10 @@ acct login --email admin@example.com --api-url https://backoffice.yourdomain.com
 - acct payment record
 - acct todo complete <id>
 
+## Roadmap
+
+See `ROADMAP.md` for the full feature roadmap and integration phases. Check it before starting new work to pick the next task.
+
 ## Environment Variables
 
 See `.env.example`. Key vars:
@@ -97,6 +101,13 @@ See `.env.example`. Key vars:
 - `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_REGION` — storage (production)
 - `API_BASE_URL` — external URL used in setup links
 - `CORS_ORIGINS` — comma-separated allowed origins
+
+## Git Workflow
+
+- **main에 직접 push 금지** — 항상 feature branch를 만들고 PR을 올릴 것
+- Branch naming: `feat/`, `fix/`, `refactor/`, `test/` + 짧은 설명 (e.g., `feat/airwallex-fx-rate`)
+- PR 올린 후 리뷰/승인 받고 머지
+- 커밋 메시지: conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`)
 
 ## Conventions
 
