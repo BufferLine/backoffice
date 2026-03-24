@@ -560,6 +560,126 @@ else
 fi
 
 # -------------------------------------------------------------------------
+# 15. Loan
+# -------------------------------------------------------------------------
+echo ""
+echo "[15. Loan]"
+
+OUTPUT=$(acct_run loan create \
+  --type shareholder_loan \
+  --direction inbound \
+  --counterparty "John Smith" \
+  --principal 5000 \
+  --start-date 2026-03-09 \
+  --currency SGD \
+  --description "Shareholder loan for working capital")
+LOAN_ID=$(echo "$OUTPUT" | python3 -c \
+  "import sys,json,re
+lines=sys.stdin.read()
+m=re.search(r'\{.*\}', lines, re.DOTALL)
+if m:
+    print(json.loads(m.group()).get('id',''))
+" 2>/dev/null || true)
+
+if [ -n "$LOAN_ID" ]; then
+  pass "acct loan create ($LOAN_ID)"
+else
+  fail "acct loan create" "$OUTPUT"
+  LOAN_ID=""
+fi
+
+OUTPUT=$(COLUMNS=200 acct_run loan list)
+if echo "$OUTPUT" | grep -q "shareholder_loan"; then
+  pass "acct loan list"
+else
+  fail "acct loan list" "$OUTPUT"
+fi
+
+if [ -n "${LOAN_ID:-}" ]; then
+
+OUTPUT=$(acct_run loan show "$LOAN_ID")
+if echo "$OUTPUT" | grep -q "5000"; then
+  pass "acct loan show (principal=5000)"
+else
+  fail "acct loan show" "$OUTPUT"
+fi
+
+OUTPUT=$(acct_run loan balance "$LOAN_ID")
+if echo "$OUTPUT" | grep -q "outstanding"; then
+  pass "acct loan balance"
+else
+  fail "acct loan balance" "$OUTPUT"
+fi
+
+OUTPUT=$(acct_run loan edit "$LOAN_ID" --description "Updated loan description")
+if echo "$OUTPUT" | grep -qi "updated"; then
+  pass "acct loan edit"
+else
+  fail "acct loan edit" "$OUTPUT"
+fi
+
+OUTPUT=$(acct_run loan generate-pdf "$LOAN_ID")
+if echo "$OUTPUT" | grep -q "document_file_id"; then
+  pass "acct loan generate-pdf"
+else
+  fail "acct loan generate-pdf" "$OUTPUT"
+fi
+
+OUTPUT=$(acct_run loan generate-statement "$LOAN_ID")
+if echo "$OUTPUT" | grep -q "document_file_id"; then
+  pass "acct loan generate-statement"
+else
+  fail "acct loan generate-statement" "$OUTPUT"
+fi
+
+# Record a repayment and allocate it to the loan
+OUTPUT=$(acct_run payment record \
+  --type bank_transfer \
+  --entity "loan:$LOAN_ID" \
+  --amount 5000 \
+  --currency SGD \
+  --date 2026-03-20)
+REPAY_PMT_ID=$(echo "$OUTPUT" | python3 -c \
+  "import sys,json,re
+lines=sys.stdin.read()
+m=re.search(r'\{.*\}', lines, re.DOTALL)
+if m:
+    print(json.loads(m.group()).get('id',''))
+" 2>/dev/null || true)
+if [ -n "$REPAY_PMT_ID" ]; then
+  pass "acct payment record (loan repayment)"
+else
+  fail "acct payment record (loan repayment)" "$OUTPUT"
+fi
+
+if [ -n "${REPAY_PMT_ID:-}" ]; then
+OUTPUT=$(acct_run payment allocate "$REPAY_PMT_ID" \
+  --entity "loan:$LOAN_ID" \
+  --amount 5000)
+if echo "$OUTPUT" | grep -qi "allocated"; then
+  pass "acct payment allocate (loan)"
+else
+  fail "acct payment allocate (loan)" "$OUTPUT"
+fi
+fi
+
+OUTPUT=$(acct_run loan mark-repaid "$LOAN_ID")
+if echo "$OUTPUT" | grep -q '"repaid"'; then
+  pass "acct loan mark-repaid"
+else
+  fail "acct loan mark-repaid" "$OUTPUT"
+fi
+
+OUTPUT=$(acct_run loan generate-discharge "$LOAN_ID")
+if echo "$OUTPUT" | grep -q "document_file_id"; then
+  pass "acct loan generate-discharge"
+else
+  fail "acct loan generate-discharge" "$OUTPUT"
+fi
+
+fi  # LOAN_ID guard
+
+# -------------------------------------------------------------------------
 # Summary
 # -------------------------------------------------------------------------
 echo ""
