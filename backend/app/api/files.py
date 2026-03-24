@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import AuthenticatedUser, require_permission
 from app.database import get_db
 from app.models.file import File
-from app.services.file_storage import FileStorageService, get_file_storage, safe_filename
+from app.services.file_storage import FileStorageService, build_content_disposition, get_file_storage
 
 router = APIRouter()
 
@@ -33,7 +33,7 @@ async def download_file(
         io.BytesIO(content),
         media_type=file_record.mime_type or "application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_filename(file_record.original_filename)}"',
+            "Content-Disposition": build_content_disposition(file_record.original_filename or "download"),
             "Content-Length": str(len(content)),
         },
     )

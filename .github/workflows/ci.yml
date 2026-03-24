@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: python -m pytest tests/unit/ -v --tb=short
+
+  e2e-tests:
+    name: E2E Tests
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: backoffice
+          POSTGRES_PASSWORD: devpassword123
+          POSTGRES_DB: backoffice
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U backoffice"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://backoffice:devpassword123@localhost:5432/backoffice
+      DB_PASSWORD: devpassword123
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: miniodevpassword123
+      S3_BUCKET: backoffice
+      S3_REGION: us-east-1
+      JWT_SECRET: ci_test_jwt_secret_not_for_production_use
+      API_BASE_URL: http://localhost:8000
+      CORS_ORIGINS: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend
+        run: pip install -e ".[dev]"
+        working-directory: backend
+
+      - name: Install CLI
+        run: pip install -e "."
+        working-directory: cli
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=miniodevpassword123 \
+            minio/minio server /data
+          # Wait for MinIO to be ready
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && break
+            sleep 1
+          done
+
+      - name: Create MinIO bucket
+        run: |
+          curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+          chmod +x /usr/local/bin/mc
+          mc alias set local http://localhost:9000 minioadmin miniodevpassword123
+          mc mb local/backoffice --ignore-existing
+
+      - name: Run migrations
+        run: alembic upgrade head
+        working-directory: backend
+
+      - name: Start server
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && break
+            sleep 1
+          done
+        working-directory: backend
+
+      - name: API E2E tests
+        run: bash scripts/e2e.sh
+
+      - name: Reset DB for CLI E2E
+        run: |
+          pkill -f "uvicorn app.main" || true
+          sleep 1
+          PGPASSWORD=devpassword123 psql -h localhost -U backoffice -d postgres \
+            -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='backoffice' AND pid <> pg_backend_pid();" \
+            -c "DROP DATABASE IF EXISTS backoffice;" \
+            -c "CREATE DATABASE backoffice;"
+          cd backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && break
+            sleep 1
+          done
+
+      - name: CLI E2E tests
+        run: bash scripts/e2e-cli.sh

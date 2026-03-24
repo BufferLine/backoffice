@@ -1,4 +1,5 @@
 import logging
+from typing import Self
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -56,7 +57,13 @@ class Settings(BaseSettings):
 
 
     @model_validator(mode="after")
-    def _check_production_secrets(self):
+    def _normalize_settings(self) -> Self:
+        self.CORS_ORIGINS = ",".join(
+            origin
+            for raw_origin in self.CORS_ORIGINS.split(",")
+            if (origin := raw_origin.strip())
+        )
+
         if self.ENVIRONMENT == "production":
             if self.JWT_SECRET in _WEAK_JWT_SECRETS or len(self.JWT_SECRET) < 32:
                 raise ValueError(
@@ -67,6 +74,10 @@ class Settings(BaseSettings):
                 "JWT_SECRET is using a default value — do not use in production"
             )
         return self
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return self.CORS_ORIGINS.split(",") if self.CORS_ORIGINS else []
 
 
 settings = Settings()
