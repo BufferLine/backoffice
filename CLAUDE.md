@@ -21,6 +21,15 @@ Quick unit tests only (no server needed):
 python -m pytest backend/tests/unit/ -v
 ```
 
+Document sample generation (visual QA for PDF templates):
+```bash
+python scripts/generate-samples.py          # generate to /tmp/backoffice-samples/
+python scripts/generate-samples.py --open   # generate and open in viewer
+python scripts/generate-samples.py --ci     # CI mode: verify non-zero size
+```
+
+**Important**: After any change to PDF templates (`backend/app/templates/*.html`) or the PDF service (`backend/app/services/pdf.py`), always run `generate-samples.py --open` and visually verify all 5 document types (invoice, payslip, loan agreement, loan statement, loan discharge). WeasyPrint has CSS layout quirks (especially with flexbox and page breaks) that only show up in rendered output.
+
 See [docs/testing.md](docs/testing.md) for test tiers, writing guide, and pre-PR checklist.
 
 ## Project Structure
