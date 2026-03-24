@@ -1,12 +1,16 @@
+import io
 import uuid
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AuthenticatedUser, require_permission
 from app.database import get_db
-from app.services.file_storage import FileStorageService, get_file_storage
+from app.models.file import File
+from app.services.file_storage import FileStorageService, build_content_disposition, get_file_storage
 from app.schemas.loan import (
     AllocationItem,
     LoanBalanceResponse,
@@ -190,3 +194,65 @@ async def generate_loan_discharge(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
     await db.commit()
     return {"document_file_id": str(file_id)}
+
+
+async def _download_loan_file(
+    loan_id: uuid.UUID,
+    file_id_attr: str,
+    doc_label: str,
+    db: AsyncSession,
+    file_storage: FileStorageService,
+) -> StreamingResponse:
+    loan = await loan_svc.get_loan(db, loan_id)
+    if loan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Loan {loan_id} not found")
+    file_id = getattr(loan, file_id_attr, None)
+    if not file_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No {doc_label} PDF available for this loan.")
+    result = await db.execute(select(File).where(File.id == file_id))
+    file_record = result.scalar_one_or_none()
+    if not file_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF file not found")
+    content = file_storage.download(file_record.storage_key)
+    filename = file_record.original_filename or f"loan-{doc_label}-{loan_id}.pdf"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=file_record.mime_type or "application/pdf",
+        headers={
+            "Content-Disposition": build_content_disposition(filename),
+            "Content-Length": str(len(content)),
+        },
+    )
+
+
+@router.get("/{loan_id}/agreement-pdf")
+async def download_agreement_pdf(
+    loan_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("loan:read"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> StreamingResponse:
+    """Download the loan agreement PDF."""
+    return await _download_loan_file(loan_id, "agreement_file_id", "agreement", db, file_storage)
+
+
+@router.get("/{loan_id}/statement-pdf")
+async def download_statement_pdf(
+    loan_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("loan:read"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> StreamingResponse:
+    """Download the latest loan statement PDF."""
+    return await _download_loan_file(loan_id, "latest_statement_file_id", "statement", db, file_storage)
+
+
+@router.get("/{loan_id}/discharge-pdf")
+async def download_discharge_pdf(
+    loan_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("loan:read"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> StreamingResponse:
+    """Download the loan discharge letter PDF."""
+    return await _download_loan_file(loan_id, "discharge_file_id", "discharge", db, file_storage)

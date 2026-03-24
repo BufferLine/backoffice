@@ -2,7 +2,7 @@ from typing import Optional
 
 import typer
 
-from acct.api_client import api_get, api_patch, api_post
+from acct.api_client import api_download, api_get, api_patch, api_post
 from acct.formatters import print_json, print_success, print_table
 
 app = typer.Typer(help="Loan management commands")
@@ -171,3 +171,24 @@ def generate_discharge(
     data = api_post(f"/api/loans/{loan_id}/generate-discharge")
     print_success(f"Loan discharge PDF generated: {data.get('document_file_id', '')}")
     print_json(data)
+
+
+@app.command()
+def download(
+    loan_id: str = typer.Argument(..., help="Loan ID"),
+    doc_type: str = typer.Option("agreement", "--type", help="Document type: agreement, statement, discharge"),
+    output: str = typer.Option(".", "-o", "--output", help="Output directory or file path"),
+) -> None:
+    """Download a loan document PDF."""
+    endpoint_map = {
+        "agreement": "agreement-pdf",
+        "statement": "statement-pdf",
+        "discharge": "discharge-pdf",
+    }
+    endpoint = endpoint_map.get(doc_type)
+    if not endpoint:
+        typer.echo(f"Unknown document type: {doc_type}. Use: agreement, statement, discharge", err=True)
+        raise typer.Exit(1)
+
+    filepath = api_download(f"/api/loans/{loan_id}/{endpoint}", output)
+    print_success(f"Downloaded: {filepath}")
