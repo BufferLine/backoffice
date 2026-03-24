@@ -232,20 +232,13 @@ async def write_off_loan(
     return loan
 
 
-async def generate_loan_agreement_pdf(
+async def _load_company_and_branding(
     db: AsyncSession,
-    loan: Loan,
-    user_id: uuid.UUID,
     file_storage: FileStorageService,
-) -> uuid.UUID:
-    """Generate loan agreement PDF, upload to storage, return File ID."""
-    from app.services.pdf import render_loan_agreement_pdf, _encode_image
-
-    # Load company settings — required for a valid loan agreement
+) -> tuple:
+    """Load company settings and branding assets. Returns (company, company_data, stamp_bytes, stamp_mime, logo_bytes, logo_mime, theme)."""
     result = await db.execute(select(CompanySettings).limit(1))
     company = result.scalar_one_or_none()
-    if company is None or not company.legal_name:
-        raise ValueError("Company settings must be configured before generating a loan agreement")
 
     company_data = {}
     if company:
@@ -256,42 +249,6 @@ async def generate_loan_agreement_pdf(
             "billing_email": company.billing_email,
         }
 
-    # Get repayment history via allocations
-    _, total_repaid, outstanding, allocations = await get_loan_balance(db, loan.id)
-
-    repayments = [
-        {
-            "date": entry.payment_date or entry.created_at.date(),
-            "reference": entry.payment_reference,
-            "amount": entry.amount,
-            "notes": entry.notes,
-        }
-        for entry in allocations
-    ]
-
-    pdf_data = {
-        "loan": {
-            "id": str(loan.id),
-            "loan_type": loan.loan_type,
-            "loan_type_display": _LOAN_TYPE_DISPLAY.get(loan.loan_type, loan.loan_type),
-            "direction": loan.direction,
-            "direction_display": _DIRECTION_DISPLAY.get(loan.direction, loan.direction),
-            "counterparty": loan.counterparty,
-            "currency": loan.currency,
-            "principal": loan.principal,
-            "interest_rate": loan.interest_rate,
-            "interest_type": loan.interest_type,
-            "start_date": loan.start_date,
-            "maturity_date": loan.maturity_date,
-            "description": loan.description,
-        },
-        "company": company_data,
-        "repayments": repayments if repayments else None,
-        "total_repaid": total_repaid,
-        "outstanding": outstanding,
-    }
-
-    # Load branding
     stamp_bytes, stamp_mime, logo_bytes, logo_mime, theme = None, "image/png", None, "image/png", None
     if company:
         if company.stamp_file_id:
@@ -317,6 +274,65 @@ async def generate_loan_agreement_pdf(
             "accent_color": company.accent_color or "#374151",
             "font_family": company.font_family or "Helvetica, Arial, sans-serif",
         }
+
+    return company, company_data, stamp_bytes, stamp_mime, logo_bytes, logo_mime, theme
+
+
+def _build_loan_dict(loan: Loan) -> dict:
+    return {
+        "id": str(loan.id),
+        "loan_type": loan.loan_type,
+        "loan_type_display": _LOAN_TYPE_DISPLAY.get(loan.loan_type, loan.loan_type),
+        "direction": loan.direction,
+        "direction_display": _DIRECTION_DISPLAY.get(loan.direction, loan.direction),
+        "counterparty": loan.counterparty,
+        "currency": loan.currency,
+        "principal": loan.principal,
+        "interest_rate": loan.interest_rate,
+        "interest_type": loan.interest_type,
+        "start_date": loan.start_date,
+        "maturity_date": loan.maturity_date,
+        "description": loan.description,
+    }
+
+
+async def generate_loan_agreement_pdf(
+    db: AsyncSession,
+    loan: Loan,
+    user_id: uuid.UUID,
+    file_storage: FileStorageService,
+) -> uuid.UUID:
+    """Generate loan agreement PDF, upload to storage, return File ID. Immutable once generated."""
+    from app.services.pdf import render_loan_agreement_pdf
+
+    if loan.agreement_file_id is not None:
+        raise ValueError("Agreement already generated — it is immutable")
+
+    company, company_data, stamp_bytes, stamp_mime, logo_bytes, logo_mime, theme = (
+        await _load_company_and_branding(db, file_storage)
+    )
+    if company is None or not company.legal_name:
+        raise ValueError("Company settings must be configured before generating a loan agreement")
+
+    _, total_repaid, outstanding, allocations = await get_loan_balance(db, loan.id)
+
+    repayments = [
+        {
+            "date": entry.payment_date or entry.created_at.date(),
+            "reference": entry.payment_reference,
+            "amount": entry.amount,
+            "notes": entry.notes,
+        }
+        for entry in allocations
+    ]
+
+    pdf_data = {
+        "loan": _build_loan_dict(loan),
+        "company": company_data,
+        "repayments": repayments if repayments else None,
+        "total_repaid": total_repaid,
+        "outstanding": outstanding,
+    }
 
     pdf_bytes = render_loan_agreement_pdf(
         pdf_data,
@@ -344,12 +360,174 @@ async def generate_loan_agreement_pdf(
     db.add(file_record)
     await db.flush()
 
-    # Link to loan
-    loan.document_file_id = file_record.id
+    loan.agreement_file_id = file_record.id
+    loan.document_file_id = file_record.id  # backward compat
     await db.flush()
 
     await AuditService(db).log(
         action="loan.generate_pdf",
+        entity_type="loan",
+        entity_id=loan.id,
+        actor_id=user_id,
+        output_data={"document_file_id": str(file_record.id)},
+    )
+
+    return file_record.id
+
+
+async def generate_loan_statement_pdf(
+    db: AsyncSession,
+    loan: Loan,
+    user_id: uuid.UUID,
+    file_storage: FileStorageService,
+) -> uuid.UUID:
+    """Generate loan statement PDF, upload to storage, return File ID. Overwrites previous statement."""
+    from app.services.pdf import render_loan_statement_pdf
+
+    company, company_data, stamp_bytes, stamp_mime, logo_bytes, logo_mime, theme = (
+        await _load_company_and_branding(db, file_storage)
+    )
+    if company is None or not company.legal_name:
+        raise ValueError("Company settings must be configured before generating a loan statement")
+
+    _, total_repaid, outstanding, allocations = await get_loan_balance(db, loan.id)
+
+    repayments = [
+        {
+            "date": entry.payment_date or entry.created_at.date(),
+            "reference": entry.payment_reference,
+            "amount": entry.amount,
+            "notes": entry.notes,
+        }
+        for entry in allocations
+    ]
+
+    pdf_data = {
+        "loan": _build_loan_dict(loan),
+        "company": company_data,
+        "repayments": repayments if repayments else None,
+        "total_repaid": total_repaid,
+        "outstanding": outstanding,
+        "statement_date": date.today(),
+    }
+
+    pdf_bytes = render_loan_statement_pdf(
+        pdf_data,
+        stamp_bytes=stamp_bytes,
+        stamp_mime=stamp_mime,
+        logo_bytes=logo_bytes,
+        logo_mime=logo_mime,
+        theme=theme,
+    )
+
+    filename = f"loan-statement-{str(loan.id)[:8]}.pdf"
+    storage_key, sha256, size = file_storage.upload(
+        io.BytesIO(pdf_bytes), original_filename=filename, mime_type="application/pdf",
+    )
+
+    file_record = File(
+        storage_key=storage_key,
+        original_filename=filename,
+        mime_type="application/pdf",
+        size_bytes=size,
+        checksum_sha256=sha256,
+        linked_entity_type="loan",
+        linked_entity_id=loan.id,
+    )
+    db.add(file_record)
+    await db.flush()
+
+    loan.latest_statement_file_id = file_record.id
+    await db.flush()
+
+    await AuditService(db).log(
+        action="loan.generate_statement",
+        entity_type="loan",
+        entity_id=loan.id,
+        actor_id=user_id,
+        output_data={"document_file_id": str(file_record.id)},
+    )
+
+    return file_record.id
+
+
+async def generate_loan_discharge_pdf(
+    db: AsyncSession,
+    loan: Loan,
+    user_id: uuid.UUID,
+    file_storage: FileStorageService,
+) -> uuid.UUID:
+    """Generate discharge letter PDF, upload to storage, return File ID. Immutable once generated."""
+    from app.services.pdf import render_loan_discharge_pdf
+
+    if loan.status != "repaid":
+        raise ValueError(f"Cannot generate discharge letter: loan status is '{loan.status}', must be 'repaid'")
+
+    _, _, outstanding, _ = await get_loan_balance(db, loan.id)
+    if outstanding != Decimal("0"):
+        raise ValueError(f"Cannot generate discharge letter: outstanding balance is {outstanding}")
+
+    if loan.discharge_file_id is not None:
+        raise ValueError("Discharge letter already generated — it is immutable")
+
+    company, company_data, stamp_bytes, stamp_mime, logo_bytes, logo_mime, theme = (
+        await _load_company_and_branding(db, file_storage)
+    )
+    if company is None or not company.legal_name:
+        raise ValueError("Company settings must be configured before generating a discharge letter")
+
+    _, total_repaid, _, allocations = await get_loan_balance(db, loan.id)
+
+    repayments = [
+        {
+            "date": entry.payment_date or entry.created_at.date(),
+            "reference": entry.payment_reference,
+            "amount": entry.amount,
+            "notes": entry.notes,
+        }
+        for entry in allocations
+    ]
+
+    pdf_data = {
+        "loan": _build_loan_dict(loan),
+        "company": company_data,
+        "repayments": repayments if repayments else None,
+        "total_repaid": total_repaid,
+        "outstanding": Decimal("0"),
+        "discharge_date": date.today(),
+    }
+
+    pdf_bytes = render_loan_discharge_pdf(
+        pdf_data,
+        stamp_bytes=stamp_bytes,
+        stamp_mime=stamp_mime,
+        logo_bytes=logo_bytes,
+        logo_mime=logo_mime,
+        theme=theme,
+    )
+
+    filename = f"loan-discharge-{str(loan.id)[:8]}.pdf"
+    storage_key, sha256, size = file_storage.upload(
+        io.BytesIO(pdf_bytes), original_filename=filename, mime_type="application/pdf",
+    )
+
+    file_record = File(
+        storage_key=storage_key,
+        original_filename=filename,
+        mime_type="application/pdf",
+        size_bytes=size,
+        checksum_sha256=sha256,
+        linked_entity_type="loan",
+        linked_entity_id=loan.id,
+    )
+    db.add(file_record)
+    await db.flush()
+
+    loan.discharge_file_id = file_record.id
+    await db.flush()
+
+    await AuditService(db).log(
+        action="loan.generate_discharge",
         entity_type="loan",
         entity_id=loan.id,
         actor_id=user_id,

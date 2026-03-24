@@ -142,6 +142,51 @@ async def generate_loan_pdf(
     loan = await loan_svc.get_loan(db, loan_id)
     if loan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Loan {loan_id} not found")
-    file_id = await loan_svc.generate_loan_agreement_pdf(db, loan, current_user.id, file_storage)
+    try:
+        file_id = await loan_svc.generate_loan_agreement_pdf(db, loan, current_user.id, file_storage)
+    except ValueError as e:
+        msg = str(e)
+        if "immutable" in msg:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+    await db.commit()
+    return {"document_file_id": str(file_id)}
+
+
+@router.post("/{loan_id}/generate-statement", response_model=dict)
+async def generate_loan_statement(
+    loan_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("loan:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> dict:
+    loan = await loan_svc.get_loan(db, loan_id)
+    if loan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Loan {loan_id} not found")
+    try:
+        file_id = await loan_svc.generate_loan_statement_pdf(db, loan, current_user.id, file_storage)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    await db.commit()
+    return {"document_file_id": str(file_id)}
+
+
+@router.post("/{loan_id}/generate-discharge", response_model=dict)
+async def generate_loan_discharge(
+    loan_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("loan:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> dict:
+    loan = await loan_svc.get_loan(db, loan_id)
+    if loan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Loan {loan_id} not found")
+    try:
+        file_id = await loan_svc.generate_loan_discharge_pdf(db, loan, current_user.id, file_storage)
+    except ValueError as e:
+        msg = str(e)
+        if "Company settings" in msg:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
     await db.commit()
     return {"document_file_id": str(file_id)}

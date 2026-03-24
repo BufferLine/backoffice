@@ -133,6 +133,8 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [x] Loan agreement PDF generation (terms, schedule, signatures)
 - [x] Interest calculation (simple/compound, configurable rate)
 - [ ] Repayment schedule tracking with reminders
+- [ ] Loan document lifecycle: Agreement (immutable) / Statement (regeneratable) / Discharge Letter (on completion)
+- [ ] DocuSign integration for e-signatures (via SignatureProvider mixin)
 
 ### Payment Methods
 - [ ] Validation: bank type requires bank fields, crypto requires wallet
@@ -150,7 +152,12 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] Dashboard: KPI cards with live data
 - [ ] Payroll: create/review/finalize flow
 
+### Agent / Plugin
+- [ ] `acct setup-skill --platform claude|codex|gemini` for AI tool integration
+- [ ] Research platform-specific skill/plugin standards as they mature
+- [ ] Multi-step workflow agent mode (natural language → CLI execution)
+
 ### Infrastructure
-- [ ] CI/CD: GitHub Actions for test + lint
+- [x] CI/CD: GitHub Actions for test + lint
 - [ ] Automated backup strategy
 - [ ] Health check monitoring + alerts

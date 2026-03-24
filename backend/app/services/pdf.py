@@ -186,3 +186,11 @@ def render_payslip_pdf(data: dict[str, Any], **kwargs) -> bytes:
 
 def render_loan_agreement_pdf(data: dict[str, Any], **kwargs) -> bytes:
     return render_pdf("loan_agreement.html", data, **kwargs)
+
+
+def render_loan_statement_pdf(data: dict[str, Any], **kwargs) -> bytes:
+    return render_pdf("loan_statement.html", data, **kwargs)
+
+
+def render_loan_discharge_pdf(data: dict[str, Any], **kwargs) -> bytes:
+    return render_pdf("loan_discharge.html", data, **kwargs)
