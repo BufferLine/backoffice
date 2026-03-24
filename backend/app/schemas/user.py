@@ -39,8 +39,9 @@ class MeResponse(UserResponse):
 
 
 def _validate_password(v: str) -> str:
+    v = v.strip()
     if len(v) < 8:
-        raise ValueError("Password must be at least 8 characters")
+        raise ValueError("Password must be at least 8 characters (excluding whitespace)")
     return v
 
 

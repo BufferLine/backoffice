@@ -6,7 +6,7 @@ from typing import Optional
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,6 +57,12 @@ class SetupCompleteRequest(BaseModel):
     email: str
     password: str
     name: str
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, v: str) -> str:
+        from app.schemas.user import _validate_password
+        return _validate_password(v)
 
 
 @router.post("/init", response_model=SetupInitResponse)
