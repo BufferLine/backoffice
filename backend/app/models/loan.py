@@ -33,7 +33,17 @@ class Loan(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     # status: active / repaid / written_off
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Deprecated — use agreement_file_id instead. Kept for backward compatibility.
     document_file_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
+    )
+    agreement_file_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
+    )
+    latest_statement_file_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
+    )
+    discharge_file_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
     )
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -47,4 +57,7 @@ class Loan(Base):
 
     currency_rel = relationship("Currency", foreign_keys=[currency])
     document_file = relationship("File", foreign_keys=[document_file_id])
+    agreement_file = relationship("File", foreign_keys=[agreement_file_id])
+    latest_statement_file = relationship("File", foreign_keys=[latest_statement_file_id])
+    discharge_file = relationship("File", foreign_keys=[discharge_file_id])
     creator = relationship("User", foreign_keys=[created_by])

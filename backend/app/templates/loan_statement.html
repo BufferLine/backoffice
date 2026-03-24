@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Loan Statement — {{ loan.loan_number or loan.id[:8] }}</title>
+  <link rel="stylesheet" href="base.css" />
+  <style>
+    .header { border-bottom-color: {{ theme.primary_color }}; }
+    .doc-title h2 { color: {{ theme.primary_color }}; }
+    thead tr { background-color: {{ theme.primary_color }}; }
+    .totals-table .total-row td { border-top-color: {{ theme.accent_color }}; color: {{ theme.accent_color }}; }
+    .highlight-box { background: #f0f4ff; border: 1pt solid #c5d0e6; border-radius: 3pt; padding: 12pt 16pt; margin-bottom: 20pt; }
+    .highlight-box p { font-size: 9.5pt; line-height: 1.7; }
+    .highlight-box strong { color: {{ theme.accent_color }}; }
+    .statement-date { text-align: right; font-size: 9pt; color: #888; margin-bottom: 20pt; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="company-info">
+      {% if logo_uri %}
+        <img src="{{ logo_uri }}" alt="{{ company.legal_name }}" style="max-height:60px; margin-bottom:8pt; display:block;" />
+      {% endif %}
+      <h1>{{ company.legal_name }}</h1>
+      <p>
+        {% if company.address %}{{ company.address }}<br/>{% endif %}
+        {% if company.uen %}UEN: {{ company.uen }}<br/>{% endif %}
+        {% if company.billing_email %}{{ company.billing_email }}{% endif %}
+      </p>
+    </div>
+    <div class="doc-title">
+      <h2>Loan Statement</h2>
+      <div class="doc-number">{{ loan.loan_number or loan.id[:8] }}</div>
+    </div>
+  </div>
+
+  <!-- Statement date -->
+  <p class="statement-date">As of {{ statement_date }}</p>
+
+  <!-- Loan Summary -->
+  <div class="highlight-box">
+    <p>
+      <strong>Loan Type:</strong> {{ loan.loan_type_display }}<br/>
+      <strong>Counterparty:</strong> {{ loan.counterparty }}<br/>
+      <strong>Principal Amount:</strong> {{ loan.currency }} {{ loan.principal|money }}<br/>
+      <strong>Interest Rate:</strong> {% if loan.interest_rate and loan.interest_rate != "0" %}{{ loan.interest_rate|pct }}% per annum ({{ loan.interest_type }}){% else %}Interest-free{% endif %}<br/>
+      <strong>Start Date:</strong> {{ loan.start_date }}<br/>
+      {% if loan.maturity_date %}<strong>Maturity Date:</strong> {{ loan.maturity_date }}<br/>{% endif %}
+      <strong>Status:</strong> {{ loan.status_display }}
+    </p>
+  </div>
+
+  <!-- Repayment History -->
+  <div class="section">
+    <h3>Repayment History</h3>
+    {% if repayments %}
+    <table>
+      <thead>
+        <tr>
+          <th style="width:25%">Date</th>
+          <th style="width:25%">Reference</th>
+          <th class="right" style="width:25%">Amount</th>
+          <th style="width:25%">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in repayments %}
+        <tr>
+          <td>{{ r.date }}</td>
+          <td>{{ r.reference or "—" }}</td>
+          <td class="right">{{ loan.currency }} {{ r.amount|money }}</td>
+          <td>{{ r.notes or "" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="font-size:9pt; color:#888; margin-bottom:20pt;">No repayments recorded.</p>
+    {% endif %}
+  </div>
+
+  <!-- Totals -->
+  <div class="totals-table" style="width:260pt; margin-left:auto;">
+    <table style="width:100%;">
+      <tr>
+        <td class="label">Principal</td>
+        <td class="amount">{{ loan.currency }} {{ loan.principal|money }}</td>
+      </tr>
+      <tr>
+        <td class="label">Total Repaid</td>
+        <td class="amount">{{ loan.currency }} {{ total_repaid|money }}</td>
+      </tr>
+      <tr class="total-row">
+        <td class="label">Outstanding Balance</td>
+        <td class="amount">{{ loan.currency }} {{ outstanding|money }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    {{ company.legal_name }}{% if company.uen %} &middot; UEN {{ company.uen }}{% endif %}
+    {% if company.address %} &middot; {{ company.address }}{% endif %}
+  </div>
+
+</body>
+</html>
