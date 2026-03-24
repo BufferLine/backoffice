@@ -2,7 +2,7 @@
 """Generate sample PDFs for all document types.
 
 Usage:
-    python scripts/generate-samples.py          # generate to /tmp/backoffice-samples/
+    python scripts/generate-samples.py          # generate to samples/
     python scripts/generate-samples.py --open   # generate and open in default viewer
     python scripts/generate-samples.py --ci     # CI mode: generate + verify non-zero size
 
@@ -28,7 +28,7 @@ from app.services.pdf import (
     render_payslip_pdf,
 )
 
-OUTPUT_DIR = Path("/tmp/backoffice-samples")
+OUTPUT_DIR = Path(__file__).parent.parent / "samples"
 
 
 def _make_sample_stamp() -> bytes:

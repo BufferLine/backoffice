@@ -11,12 +11,14 @@
     .totals-table .total-row td { border-top-color: {{ theme.accent_color }}; color: {{ theme.accent_color }}; }
     .terms-list { list-style: decimal; padding-left: 16pt; }
     .terms-list li { font-size: 9.5pt; line-height: 1.8; margin-bottom: 6pt; color: #333; }
-    .sig-section { page-break-before: always; }
+    .sig-section { margin-top: 40pt; }
     .sig-table { width: 100%; margin-top: 24pt; border-collapse: collapse; }
-    .sig-table td { width: 45%; vertical-align: top; padding: 0; border: none !important; background: none !important; }
+    .sig-table td { width: 45%; vertical-align: bottom; padding: 0; border: none !important; background: none !important; }
     .sig-table td.spacer { width: 10%; border: none !important; }
-    .sig-table thead tr { background: none !important; }
-    .sig-line { border-bottom: 1pt solid #333; margin-top: 40pt; margin-bottom: 6pt; }
+    .sig-block { }
+    .sig-stamp { text-align: center; padding-bottom: 8pt; }
+    .sig-stamp img { max-width: 80px; max-height: 80px; opacity: 0.85; }
+    .sig-line { border-bottom: 1pt solid #333; margin-bottom: 6pt; }
     .sig-label { font-size: 9pt; color: #555; }
     .highlight-box { background: #f0f4ff; border: 1pt solid #c5d0e6; border-radius: 3pt; padding: 12pt 16pt; margin-bottom: 20pt; }
     .highlight-box p { font-size: 9.5pt; line-height: 1.7; }
@@ -155,24 +157,28 @@
   <table class="sig-table">
     <tr>
       <td>
-        <div class="sig-line"></div>
-        <p class="sig-label">
-          <strong>{% if loan.direction == "inbound" %}Lender{% else %}Borrower{% endif %}</strong><br/>
-          {{ loan.counterparty }}<br/>
-          Date: _______________
-        </p>
+        <div class="sig-block">
+          <div class="sig-line"></div>
+          <p class="sig-label">
+            <strong>{% if loan.direction == "inbound" %}Lender{% else %}Borrower{% endif %}</strong><br/>
+            {{ loan.counterparty }}<br/>
+            Date: _______________
+          </p>
+        </div>
       </td>
       <td class="spacer"></td>
       <td>
-        {% if stamp_uri %}
-          <img src="{{ stamp_uri }}" alt="Company Stamp" style="max-width:80px; max-height:80px; opacity:0.85; margin-bottom:4pt;" />
-        {% endif %}
-        <div class="sig-line"></div>
-        <p class="sig-label">
-          <strong>{% if loan.direction == "inbound" %}Borrower{% else %}Lender{% endif %}</strong><br/>
-          {{ company.legal_name }}<br/>
-          Date: _______________
-        </p>
+        <div class="sig-block">
+          {% if stamp_uri %}
+            <div class="sig-stamp"><img src="{{ stamp_uri }}" alt="Company Stamp" /></div>
+          {% endif %}
+          <div class="sig-line"></div>
+          <p class="sig-label">
+            <strong>{% if loan.direction == "inbound" %}Borrower{% else %}Lender{% endif %}</strong><br/>
+            {{ company.legal_name }}<br/>
+            Date: _______________
+          </p>
+        </div>
       </td>
     </tr>
   </table>
