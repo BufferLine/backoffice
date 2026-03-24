@@ -1,6 +1,7 @@
 import hashlib
 import re
 import uuid
+from urllib.parse import quote
 from typing import BinaryIO
 
 import boto3
@@ -9,9 +10,22 @@ from botocore.config import Config as BotoConfig
 from app.config import settings
 
 
+def _strip_header_unsafe_bytes(value: str) -> str:
+    return re.sub(r"[\r\n\x00]", "", value or "")
+
+
 def safe_filename(name: str) -> str:
     """Sanitize filename for use in Content-Disposition headers."""
-    return re.sub(r'[^\w\-.]', '_', name)
+    sanitized = _strip_header_unsafe_bytes(name)
+    sanitized = re.sub(r"[^\w.\- ]", "_", sanitized).strip(" .")
+    return sanitized or "download"
+
+
+def build_content_disposition(filename: str) -> str:
+    """Build a Content-Disposition header without reflecting unsafe bytes."""
+    safe_name = safe_filename(filename)
+    utf8_name = quote(_strip_header_unsafe_bytes(filename) or safe_name, safe="")
+    return f'attachment; filename="{safe_name}"; filename*=UTF-8\'\'{utf8_name}'
 
 
 ALLOWED_MIME_TYPES = {
