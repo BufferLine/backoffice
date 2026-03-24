@@ -2,8 +2,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,7 @@ from app.schemas.user import (
     LoginRequest,
     LoginResponse,
     MeResponse,
+    RefreshRequest,
     RoleResponse,
 )
 from app.services.auth import (
@@ -29,10 +32,13 @@ from app.services.auth import (
 )
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     body: LoginRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LoginResponse:
@@ -55,16 +61,13 @@ async def login(
 
 
 @router.post("/refresh", response_model=LoginResponse)
+@limiter.limit("10/minute")
 async def refresh(
-    body: dict,
+    request: Request,
+    body: RefreshRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LoginResponse:
-    refresh_token = body.get("refresh_token")
-    if not refresh_token:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="refresh_token is required",
-        )
+    refresh_token = body.refresh_token
 
     try:
         payload = verify_token(refresh_token)

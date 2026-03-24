@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class PermissionResponse(BaseModel):
@@ -38,10 +38,22 @@ class MeResponse(UserResponse):
     permissions: list[str]  # "domain:action" strings
 
 
+def _validate_password(v: str) -> str:
+    v = v.strip()
+    if len(v) < 8:
+        raise ValueError("Password must be at least 8 characters (excluding whitespace)")
+    return v
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     name: str
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, v: str) -> str:
+        return _validate_password(v)
 
 
 class UserUpdate(BaseModel):
@@ -58,6 +70,10 @@ class LoginResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 
 class ApiTokenCreate(BaseModel):

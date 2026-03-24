@@ -25,7 +25,7 @@ from app.schemas.payroll import (
 from app.services import payroll as payroll_service
 from app.services.audit import AuditService
 from app.services.changelog import track_entity_update
-from app.services.file_storage import FileStorageService, get_file_storage
+from app.services.file_storage import FileStorageService, get_file_storage, safe_filename
 from app.state_machines import InvalidTransitionError
 
 router = APIRouter()
@@ -254,7 +254,7 @@ async def download_payslip_pdf(
         io.BytesIO(content),
         media_type=file_record.mime_type or "application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": f'attachment; filename="{safe_filename(filename)}"',
             "Content-Length": str(len(content)),
         },
     )
