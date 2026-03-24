@@ -156,6 +156,8 @@ _DEFAULT_PERMISSIONS: list[tuple[str, str, str]] = [
     ("admin", "manage_roles", "Manage roles"),
     ("integration", "read", "Read integration status and events"),
     ("integration", "write", "Trigger integration syncs and manage providers"),
+    ("loan", "read", "Read loans"),
+    ("loan", "write", "Create and update loans"),
 ]
 
 _DEFAULT_ROLES: list[tuple[str, str, list[str]]] = [
@@ -175,6 +177,7 @@ _DEFAULT_ROLES: list[tuple[str, str, list[str]]] = [
             "export:read", "export:write",
             "admin:manage_users", "admin:manage_roles",
             "integration:read", "integration:write",
+            "loan:read", "loan:write",
         ],
     ),
     (
@@ -186,6 +189,7 @@ _DEFAULT_ROLES: list[tuple[str, str, list[str]]] = [
             "expense:read", "expense:write",
             "payment:read", "payment:write",
             "export:read", "export:write",
+            "loan:read", "loan:write",
         ],
     ),
     (
@@ -197,6 +201,7 @@ _DEFAULT_ROLES: list[tuple[str, str, list[str]]] = [
             "expense:read",
             "payment:read",
             "export:read",
+            "loan:read",
         ],
     ),
 ]

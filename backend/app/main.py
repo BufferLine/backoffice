@@ -17,7 +17,7 @@ def _get_client_ip(request) -> str:
 
 
 limiter = Limiter(key_func=_get_client_ip)
-from app.api import auth, automation, bank_reconciliation, changelog, clients, expenses, exports, files, invoices, payments, payroll, setup, tasks, users
+from app.api import auth, automation, bank_reconciliation, changelog, clients, expenses, exports, files, invoices, loans, payments, payroll, setup, tasks, users
 from app.api import settings as settings_router
 from app.api import accounts, transactions, recurring_commitments
 from app.api import payment_methods
@@ -148,6 +148,7 @@ app.include_router(transactions.router, prefix="/api/transactions", tags=["trans
 app.include_router(recurring_commitments.router, prefix="/api/recurring-commitments", tags=["recurring-commitments"])
 app.include_router(payment_methods.router, prefix="/api/payment-methods", tags=["payment-methods"])
 app.include_router(integrations_router.router, prefix="/api", tags=["integrations"])
+app.include_router(loans.router, prefix="/api/loans", tags=["loans"])
 
 
 @app.get("/health")

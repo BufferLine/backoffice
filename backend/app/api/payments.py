@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import AuthenticatedUser, require_permission
 from app.database import get_db
 from app.schemas.payment import PaymentCreate, PaymentLinkRequest, PaymentListResponse, PaymentResponse
+from app.schemas.payment_allocation import (
+    AllocatePaymentRequest,
+    AllocatePaymentResponse,
+    AllocationResponse,
+)
 from app.services import payment as payment_svc
+from app.services import payment_allocation as allocation_svc
 
 router = APIRouter()
 
@@ -74,3 +80,51 @@ async def link_payment(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     return PaymentResponse.model_validate(payment)
+
+
+@router.post("/{payment_id}/allocate", response_model=AllocatePaymentResponse, status_code=status.HTTP_201_CREATED)
+async def allocate_payment(
+    payment_id: uuid.UUID,
+    data: AllocatePaymentRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AllocatePaymentResponse:
+    try:
+        created, unallocated = await allocation_svc.allocate_payment(
+            db,
+            payment_id=payment_id,
+            allocations=data.allocations,
+            user_id=current_user.id,
+        )
+    except ValueError as e:
+        detail = str(e)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    return AllocatePaymentResponse(
+        payment_id=payment_id,
+        allocations=[AllocationResponse.model_validate(a) for a in created],
+        unallocated_amount=unallocated,
+    )
+
+
+@router.get("/{payment_id}/allocations", response_model=list[AllocationResponse])
+async def list_payment_allocations(
+    payment_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:read"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[AllocationResponse]:
+    allocations = await allocation_svc.get_payment_allocations(db, payment_id)
+    return [AllocationResponse.model_validate(a) for a in allocations]
+
+
+@router.delete("/allocations/{allocation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_allocation(
+    allocation_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    try:
+        await allocation_svc.deallocate(db, allocation_id=allocation_id, user_id=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
