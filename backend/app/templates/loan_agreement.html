@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Loan Agreement — {{ loan.loan_number or loan.id[:8] }}</title>
+  <link rel="stylesheet" href="base.css" />
+  <style>
+    .header { border-bottom-color: {{ theme.primary_color }}; }
+    .doc-title h2 { color: {{ theme.primary_color }}; }
+    thead tr { background-color: {{ theme.primary_color }}; }
+    .totals-table .total-row td { border-top-color: {{ theme.accent_color }}; color: {{ theme.accent_color }}; }
+    .terms-list { list-style: decimal; padding-left: 16pt; }
+    .terms-list li { font-size: 9.5pt; line-height: 1.8; margin-bottom: 6pt; color: #333; }
+    .signature-grid { display: flex; justify-content: space-between; margin-top: 48pt; page-break-inside: avoid; }
+    .signature-block { width: 45%; }
+    .signature-block .line { border-bottom: 1pt solid #333; margin-top: 48pt; margin-bottom: 6pt; }
+    .signature-block p { font-size: 9pt; color: #555; }
+    .highlight-box { background: #f0f4ff; border: 1pt solid #c5d0e6; border-radius: 3pt; padding: 12pt 16pt; margin-bottom: 20pt; }
+    .highlight-box p { font-size: 9.5pt; line-height: 1.7; }
+    .highlight-box strong { color: {{ theme.accent_color }}; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="company-info">
+      {% if logo_uri %}
+        <img src="{{ logo_uri }}" alt="{{ company.legal_name }}" style="max-height:60px; margin-bottom:8pt; display:block;" />
+      {% endif %}
+      <h1>{{ company.legal_name }}</h1>
+      <p>
+        {% if company.address %}{{ company.address }}<br/>{% endif %}
+        {% if company.uen %}UEN: {{ company.uen }}<br/>{% endif %}
+        {% if company.billing_email %}{{ company.billing_email }}{% endif %}
+      </p>
+    </div>
+    <div class="doc-title">
+      <h2>Loan Agreement</h2>
+      <div class="doc-number">{{ loan.loan_number or loan.id[:8] }}</div>
+    </div>
+  </div>
+
+  <!-- Loan Summary -->
+  <div class="highlight-box">
+    <p>
+      <strong>Loan Type:</strong> {{ loan.loan_type_display }}<br/>
+      <strong>Direction:</strong> {{ loan.direction_display }}<br/>
+      <strong>Counterparty:</strong> {{ loan.counterparty }}<br/>
+      <strong>Principal Amount:</strong> {{ loan.currency }} {{ loan.principal|money }}<br/>
+      <strong>Interest Rate:</strong> {% if loan.interest_rate and loan.interest_rate != "0" %}{{ loan.interest_rate|pct }}% per annum ({{ loan.interest_type }}){% else %}Interest-free{% endif %}<br/>
+      <strong>Start Date:</strong> {{ loan.start_date }}<br/>
+      {% if loan.maturity_date %}<strong>Maturity Date:</strong> {{ loan.maturity_date }}<br/>{% endif %}
+    </p>
+  </div>
+
+  <!-- Terms -->
+  <div class="section">
+    <h3>Terms and Conditions</h3>
+    <ol class="terms-list">
+      <li>
+        {% if loan.direction == "inbound" %}
+          The Lender agrees to lend and the Borrower agrees to borrow the principal sum of
+          <strong>{{ loan.currency }} {{ loan.principal|money }}</strong>.
+        {% else %}
+          The Company agrees to lend and the Borrower agrees to borrow the principal sum of
+          <strong>{{ loan.currency }} {{ loan.principal|money }}</strong>.
+        {% endif %}
+      </li>
+      <li>
+        {% if loan.interest_rate and loan.interest_rate != "0" %}
+          Interest shall accrue at the rate of <strong>{{ loan.interest_rate|pct }}% per annum</strong>
+          on a {{ loan.interest_type }} basis, calculated on the outstanding principal balance.
+        {% else %}
+          This loan is interest-free. No interest shall be charged on the principal amount.
+        {% endif %}
+      </li>
+      <li>
+        The loan commences on <strong>{{ loan.start_date }}</strong>
+        {% if loan.maturity_date %}
+          and shall be repaid in full by <strong>{{ loan.maturity_date }}</strong>.
+        {% else %}
+          and shall be repayable on demand with reasonable notice.
+        {% endif %}
+      </li>
+      <li>
+        Repayment may be made in one lump sum or in multiple installments, at the discretion
+        of the parties, provided the full outstanding amount is settled by the maturity date
+        {% if not loan.maturity_date %}or upon demand{% endif %}.
+      </li>
+      <li>
+        All payments shall be made in <strong>{{ loan.currency }}</strong> via bank transfer
+        to the designated account of the receiving party.
+      </li>
+      <li>
+        This agreement shall be governed by and construed in accordance with the laws of
+        the Republic of Singapore.
+      </li>
+    </ol>
+  </div>
+
+  {% if loan.description %}
+  <div class="section">
+    <h3>Additional Notes</h3>
+    <p style="font-size:9pt; color:#555;">{{ loan.description }}</p>
+  </div>
+  {% endif %}
+
+  {% if repayments %}
+  <!-- Repayment History -->
+  <div class="section">
+    <h3>Repayment History</h3>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:25%">Date</th>
+          <th style="width:25%">Reference</th>
+          <th class="right" style="width:25%">Amount</th>
+          <th style="width:25%">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in repayments %}
+        <tr>
+          <td>{{ r.date }}</td>
+          <td>{{ r.reference or "—" }}</td>
+          <td class="right">{{ loan.currency }} {{ r.amount|money }}</td>
+          <td>{{ r.notes or "" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="totals-table" style="width:260pt; margin-left:auto;">
+      <table style="width:100%;">
+        <tr>
+          <td class="label">Total Repaid</td>
+          <td class="amount">{{ loan.currency }} {{ total_repaid|money }}</td>
+        </tr>
+        <tr class="total-row">
+          <td class="label">Outstanding</td>
+          <td class="amount">{{ loan.currency }} {{ outstanding|money }}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Signatures -->
+  <div class="signature-grid">
+    <div class="signature-block">
+      <div class="line"></div>
+      <p>
+        <strong>{% if loan.direction == "inbound" %}Lender{% else %}Borrower{% endif %}</strong><br/>
+        {{ loan.counterparty }}<br/>
+        Date: _______________
+      </p>
+    </div>
+    <div class="signature-block">
+      {% if stamp_uri %}
+        <img src="{{ stamp_uri }}" alt="Company Stamp" style="max-width:80px; max-height:80px; opacity:0.85; margin-bottom:4pt;" />
+      {% endif %}
+      <div class="line"></div>
+      <p>
+        <strong>{% if loan.direction == "inbound" %}Borrower{% else %}Lender{% endif %}</strong><br/>
+        {{ company.legal_name }}<br/>
+        Date: _______________
+      </p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    {{ company.legal_name }}{% if company.uen %} &middot; UEN {{ company.uen }}{% endif %}
+    {% if company.address %} &middot; {{ company.address }}{% endif %}
+  </div>
+
+</body>
+</html>

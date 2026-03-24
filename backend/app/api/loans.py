@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AuthenticatedUser, require_permission
 from app.database import get_db
+from app.services.file_storage import FileStorageService, get_file_storage
 from app.schemas.loan import (
     AllocationItem,
     LoanBalanceResponse,
@@ -129,3 +130,18 @@ async def write_off_loan(
     await db.commit()
     await db.refresh(loan)
     return LoanResponse.model_validate(loan)
+
+
+@router.post("/{loan_id}/generate-pdf", response_model=dict)
+async def generate_loan_pdf(
+    loan_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("loan:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> dict:
+    loan = await loan_svc.get_loan(db, loan_id)
+    if loan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Loan {loan_id} not found")
+    file_id = await loan_svc.generate_loan_agreement_pdf(db, loan, current_user.id, file_storage)
+    await db.commit()
+    return {"document_file_id": str(file_id)}

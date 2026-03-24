@@ -147,7 +147,8 @@ def _generate_paynow_qr(
         return None
 
 
-def render_invoice_pdf(
+def render_pdf(
+    template_name: str,
     data: dict[str, Any],
     stamp_bytes: Optional[bytes] = None,
     stamp_mime: str = "image/png",
@@ -155,7 +156,11 @@ def render_invoice_pdf(
     logo_mime: str = "image/png",
     theme: Optional[dict] = None,
 ) -> bytes:
-    """Render invoice data to PDF bytes using WeasyPrint."""
+    """Render any document template to PDF bytes using WeasyPrint.
+
+    Supported templates: invoice.html, payslip.html, loan_agreement.html
+    All templates share base.css and receive stamp_uri, logo_uri, and theme.
+    """
     try:
         from weasyprint import HTML
     except ImportError:
@@ -164,28 +169,20 @@ def render_invoice_pdf(
     data["stamp_uri"] = _encode_image(stamp_bytes, stamp_mime)
     data["logo_uri"] = _encode_image(logo_bytes, logo_mime)
     data["theme"] = {**_DEFAULT_THEME, **(theme or {})}
-    template = _env.get_template("invoice.html")
+    template = _env.get_template(template_name)
     html_content = template.render(**data)
-    return HTML(string=html_content).write_pdf()
+    return HTML(string=html_content, base_url=str(TEMPLATE_DIR)).write_pdf()
 
 
-def render_payslip_pdf(
-    data: dict[str, Any],
-    stamp_bytes: Optional[bytes] = None,
-    stamp_mime: str = "image/png",
-    logo_bytes: Optional[bytes] = None,
-    logo_mime: str = "image/png",
-    theme: Optional[dict] = None,
-) -> bytes:
-    """Render payslip data to PDF bytes using WeasyPrint."""
-    try:
-        from weasyprint import HTML
-    except ImportError:
-        raise RuntimeError("WeasyPrint is not installed")
+# Convenience wrappers for backward compatibility
 
-    data["stamp_uri"] = _encode_image(stamp_bytes, stamp_mime)
-    data["logo_uri"] = _encode_image(logo_bytes, logo_mime)
-    data["theme"] = {**_DEFAULT_THEME, **(theme or {})}
-    template = _env.get_template("payslip.html")
-    html_content = template.render(**data)
-    return HTML(string=html_content).write_pdf()
+def render_invoice_pdf(data: dict[str, Any], **kwargs) -> bytes:
+    return render_pdf("invoice.html", data, **kwargs)
+
+
+def render_payslip_pdf(data: dict[str, Any], **kwargs) -> bytes:
+    return render_pdf("payslip.html", data, **kwargs)
+
+
+def render_loan_agreement_pdf(data: dict[str, Any], **kwargs) -> bytes:
+    return render_pdf("loan_agreement.html", data, **kwargs)

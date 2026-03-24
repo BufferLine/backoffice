@@ -130,7 +130,7 @@ Modular integration architecture: each provider is a plugin with API client, web
 
 ### Shareholder Loan
 - [x] Director/shareholder loan ledger (drawdown, repayment, interest)
-- [ ] Loan agreement PDF generation (terms, schedule, signatures)
+- [x] Loan agreement PDF generation (terms, schedule, signatures)
 - [x] Interest calculation (simple/compound, configurable rate)
 - [ ] Repayment schedule tracking with reminders
 
