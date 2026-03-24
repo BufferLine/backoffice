@@ -14,6 +14,7 @@ def login(
     api_url: str = typer.Option("http://localhost:8000", help="API base URL"),
 ) -> None:
     """Login and store API token."""
+    save_credentials("", api_url)
     resp = api_post("/api/auth/login", json_data={"email": email, "password": password})
     token = resp.get("access_token", "")
     refresh_token = resp.get("refresh_token")
