@@ -1,9 +1,14 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.config import settings
+
+limiter = Limiter(key_func=get_remote_address)
 from app.api import auth, automation, bank_reconciliation, changelog, clients, expenses, exports, files, invoices, payments, payroll, setup, tasks, users
 from app.api import settings as settings_router
 from app.api import accounts, transactions, recurring_commitments
@@ -76,13 +81,31 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, lambda req, exc: Response(
+    status_code=429, content=f'{{"detail": "Rate limit exceeded: {exc.detail}"}}',
+    media_type="application/json",
+))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS.split(","),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if settings.ENVIRONMENT == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 app.include_router(setup.router, prefix="/api/setup", tags=["setup"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])

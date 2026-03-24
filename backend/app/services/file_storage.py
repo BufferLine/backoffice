@@ -1,4 +1,5 @@
 import hashlib
+import re
 import uuid
 from typing import BinaryIO
 
@@ -6,6 +7,20 @@ import boto3
 from botocore.config import Config as BotoConfig
 
 from app.config import settings
+
+
+def safe_filename(name: str) -> str:
+    """Sanitize filename for use in Content-Disposition headers."""
+    return re.sub(r'[^\w\-.]', '_', name)
+
+
+ALLOWED_MIME_TYPES = {
+    "image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml",
+    "application/pdf",
+    "text/csv",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+}
 
 
 class FileStorageService:
@@ -22,6 +37,9 @@ class FileStorageService:
 
     def upload(self, file_data: BinaryIO, original_filename: str, mime_type: str) -> tuple[str, str, int]:
         """Upload file. Returns (storage_key, sha256_hex, size_bytes)."""
+        if mime_type not in ALLOWED_MIME_TYPES:
+            raise ValueError(f"File type '{mime_type}' is not allowed")
+
         content = file_data.read()
         size = len(content)
 

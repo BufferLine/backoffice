@@ -1,4 +1,12 @@
+import logging
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_WEAK_JWT_SECRETS = frozenset({
+    "change-me-in-production",
+    "dev_jwt_secret_change_in_production_32chars",
+})
 
 
 class Settings(BaseSettings):
@@ -45,6 +53,20 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str | None = None
     WISE_API_TOKEN: str | None = None
     ETHERSCAN_API_KEY: str | None = None
+
+
+    @model_validator(mode="after")
+    def _check_production_secrets(self):
+        if self.ENVIRONMENT == "production":
+            if self.JWT_SECRET in _WEAK_JWT_SECRETS or len(self.JWT_SECRET) < 32:
+                raise ValueError(
+                    "JWT_SECRET must be a random string of at least 32 characters in production"
+                )
+        elif self.JWT_SECRET in _WEAK_JWT_SECRETS:
+            logging.getLogger(__name__).warning(
+                "JWT_SECRET is using a default value — do not use in production"
+            )
+        return self
 
 
 settings = Settings()
