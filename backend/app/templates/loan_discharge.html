@@ -17,10 +17,13 @@
     .highlight-box { background: #f0f4ff; border: 1pt solid #c5d0e6; border-radius: 3pt; padding: 12pt 16pt; margin-bottom: 20pt; }
     .highlight-box p { font-size: 9.5pt; line-height: 1.7; }
     .highlight-box strong { color: {{ theme.accent_color }}; }
-    .signature-grid { display: flex; justify-content: space-between; margin-top: 48pt; page-break-inside: avoid; }
-    .signature-block { width: 45%; }
-    .signature-block .line { border-bottom: 1pt solid #333; margin-top: 48pt; margin-bottom: 6pt; }
-    .signature-block p { font-size: 9pt; color: #555; }
+    .sig-section { page-break-before: always; }
+    .sig-table { width: 100%; margin-top: 24pt; border-collapse: collapse; }
+    .sig-table td { width: 45%; vertical-align: top; padding: 0; border: none !important; background: none !important; }
+    .sig-table td.spacer { width: 10%; border: none !important; }
+    .sig-table thead tr { background: none !important; }
+    .sig-line { border-bottom: 1pt solid #333; margin-top: 40pt; margin-bottom: 6pt; }
+    .sig-label { font-size: 9pt; color: #555; }
   </style>
 </head>
 <body>
@@ -121,26 +124,31 @@
   </div>
 
   <!-- Signatures -->
-  <div class="signature-grid">
-    <div class="signature-block">
-      <div class="line"></div>
-      <p>
-        <strong>{% if loan.direction == "inbound" %}Lender{% else %}Borrower{% endif %}</strong><br/>
-        {{ loan.counterparty }}<br/>
-        Date: _______________
-      </p>
-    </div>
-    <div class="signature-block">
-      {% if stamp_uri %}
-        <img src="{{ stamp_uri }}" alt="Company Stamp" style="max-width:80px; max-height:80px; opacity:0.85; margin-bottom:4pt;" />
-      {% endif %}
-      <div class="line"></div>
-      <p>
-        <strong>{% if loan.direction == "inbound" %}Borrower{% else %}Lender{% endif %}</strong><br/>
-        {{ company.legal_name }}<br/>
-        Date: _______________
-      </p>
-    </div>
+  <div class="sig-section">
+  <table class="sig-table">
+    <tr>
+      <td>
+        <div class="sig-line"></div>
+        <p class="sig-label">
+          <strong>{% if loan.direction == "inbound" %}Lender{% else %}Borrower{% endif %}</strong><br/>
+          {{ loan.counterparty }}<br/>
+          Date: _______________
+        </p>
+      </td>
+      <td class="spacer"></td>
+      <td>
+        {% if stamp_uri %}
+          <img src="{{ stamp_uri }}" alt="Company Stamp" style="max-width:80px; max-height:80px; opacity:0.85; margin-bottom:4pt;" />
+        {% endif %}
+        <div class="sig-line"></div>
+        <p class="sig-label">
+          <strong>{% if loan.direction == "inbound" %}Borrower{% else %}Lender{% endif %}</strong><br/>
+          {{ company.legal_name }}<br/>
+          Date: _______________
+        </p>
+      </td>
+    </tr>
+  </table>
   </div>
 
   <!-- Footer -->

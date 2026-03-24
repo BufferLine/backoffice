@@ -21,6 +21,8 @@ Quick unit tests only (no server needed):
 python -m pytest backend/tests/unit/ -v
 ```
 
+After PDF template changes, visually verify with `python scripts/generate-samples.py --open`.
+
 See [docs/testing.md](docs/testing.md) for test tiers, writing guide, and pre-PR checklist.
 
 ## Project Structure
