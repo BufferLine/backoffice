@@ -79,3 +79,20 @@ def show(
     """Show payment details."""
     data = api_get(f"/api/payments/{payment_id}")
     print_json(data)
+
+
+@app.command()
+def allocate(
+    payment_id: str = typer.Argument(..., help="Payment ID"),
+    entity: str = typer.Option(..., "--entity", help="Entity reference, e.g. loan:<id>"),
+    amount: float = typer.Option(..., "--amount", help="Amount to allocate"),
+    notes: Optional[str] = typer.Option(None, "--notes", help="Allocation notes"),
+) -> None:
+    """Allocate a payment to an entity (e.g. loan)."""
+    entity_type, _, entity_id = entity.partition(":")
+    allocation: dict = {"entity_type": entity_type, "entity_id": entity_id, "amount": amount}
+    if notes:
+        allocation["notes"] = notes
+    data = api_post(f"/api/payments/{payment_id}/allocate", json_data={"allocations": [allocation]})
+    print_success(f"Payment {payment_id} allocated")
+    print_json(data)
