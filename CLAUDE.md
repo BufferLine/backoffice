@@ -80,4 +80,5 @@ scripts/                  # Dev/test/deploy scripts
 | Onboarding | [docs/onboarding.md](docs/onboarding.md) |
 | Integrations | [docs/integrations.md](docs/integrations.md) |
 | Server setup | [docs/server-setup.md](docs/server-setup.md) |
+| Upgrading | [docs/upgrading.md](docs/upgrading.md) |
 | Roadmap | [ROADMAP.md](ROADMAP.md) |

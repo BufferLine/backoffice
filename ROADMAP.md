@@ -129,9 +129,9 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] Multi-jurisdiction payroll module (e.g. Korea)
 
 ### Shareholder Loan
-- [ ] Director/shareholder loan ledger (drawdown, repayment, interest)
+- [x] Director/shareholder loan ledger (drawdown, repayment, interest)
 - [ ] Loan agreement PDF generation (terms, schedule, signatures)
-- [ ] Interest calculation (simple/compound, configurable rate)
+- [x] Interest calculation (simple/compound, configurable rate)
 - [ ] Repayment schedule tracking with reminders
 
 ### Payment Methods
