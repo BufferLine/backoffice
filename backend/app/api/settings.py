@@ -19,6 +19,24 @@ from app.services.file_storage import FileStorageService, get_file_storage
 
 router = APIRouter()
 
+_ALLOWED_COMPANY_IMAGE_MIME_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+}
+
+
+def _validate_company_image_upload(file: UploadFile) -> str:
+    mime_type = file.content_type or ""
+    if mime_type not in _ALLOWED_COMPANY_IMAGE_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported image type. Allowed types: PNG, JPEG, GIF, WebP, SVG.",
+        )
+    return mime_type
+
 
 @router.get("/company", response_model=CompanySettingsResponse)
 async def get_company_settings(
@@ -66,6 +84,8 @@ async def upload_logo(
     file_storage: FileStorageService = Depends(get_file_storage),
 ) -> dict:
     """Upload company logo image."""
+    mime_type = _validate_company_image_upload(file)
+
     result = await db.execute(select(CompanySettings).limit(1))
     company = result.scalar_one_or_none()
     if company is None:
@@ -73,12 +93,20 @@ async def upload_logo(
         db.add(company)
         await db.flush()
 
-    storage_key, sha256, size = file_storage.upload(file.file, file.filename or "logo", file.content_type or "image/png")
+    try:
+        storage_key, sha256, size = file_storage.upload(file.file, file.filename or "logo", mime_type)
+    except ValueError as exc:
+        status_code = (
+            status.HTTP_413_CONTENT_TOO_LARGE
+            if "exceeds maximum" in str(exc)
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=str(exc))
 
     file_record = FileRecord(
         storage_key=storage_key,
         original_filename=file.filename,
-        mime_type=file.content_type or "image/png",
+        mime_type=mime_type,
         size_bytes=size,
         checksum_sha256=sha256,
         uploaded_by=current_user.id,
@@ -102,6 +130,8 @@ async def upload_stamp(
     file_storage: FileStorageService = Depends(get_file_storage),
 ) -> dict:
     """Upload company stamp/chop image."""
+    mime_type = _validate_company_image_upload(file)
+
     result = await db.execute(select(CompanySettings).limit(1))
     company = result.scalar_one_or_none()
     if company is None:
@@ -109,12 +139,20 @@ async def upload_stamp(
         db.add(company)
         await db.flush()
 
-    storage_key, sha256, size = file_storage.upload(file.file, file.filename or "stamp", file.content_type or "image/png")
+    try:
+        storage_key, sha256, size = file_storage.upload(file.file, file.filename or "stamp", mime_type)
+    except ValueError as exc:
+        status_code = (
+            status.HTTP_413_CONTENT_TOO_LARGE
+            if "exceeds maximum" in str(exc)
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=str(exc))
 
     file_record = FileRecord(
         storage_key=storage_key,
         original_filename=file.filename,
-        mime_type=file.content_type or "image/png",
+        mime_type=mime_type,
         size_bytes=size,
         checksum_sha256=sha256,
         uploaded_by=current_user.id,

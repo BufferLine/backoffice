@@ -15,12 +15,13 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 from app.models.company import CompanySettings
 from app.models.currency import Currency
 from app.services.auth import create_superadmin, seed_permissions, seed_roles
-from app.services.file_storage import FileStorageService, get_file_storage
+from app.services.file_storage import ALLOWED_MIME_TYPES, FileStorageService, get_file_storage
 
 TEST_DATABASE_URL = "postgresql+asyncpg://backoffice:devpassword123@localhost:5432/backoffice_test"
 
@@ -34,7 +35,14 @@ class MockFileStorageService(FileStorageService):
 
     def upload(self, file_data, original_filename: str, mime_type: str) -> tuple[str, str, int]:
         import hashlib, uuid as _uuid
+
+        if mime_type not in ALLOWED_MIME_TYPES:
+            raise ValueError(f"File type '{mime_type}' is not allowed")
+
         content = file_data.read()
+        if len(content) > settings.FILE_MAX_SIZE_BYTES:
+            raise ValueError(f"File size {len(content)} exceeds maximum {settings.FILE_MAX_SIZE_BYTES}")
+
         sha256 = hashlib.sha256(content).hexdigest()
         storage_key = f"mock/{_uuid.uuid4()}/{original_filename}"
         self._store[storage_key] = content

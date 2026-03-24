@@ -5,6 +5,8 @@ E2E integration tests for auth endpoints.
 import pytest
 from httpx import AsyncClient
 
+from app.config import settings
+
 
 @pytest.mark.asyncio
 async def test_login_valid_credentials(client: AsyncClient):
@@ -136,3 +138,30 @@ async def test_refresh_with_invalid_token(client: AsyncClient):
 async def test_refresh_missing_token(client: AsyncClient):
     resp = await client.post("/api/auth/refresh", json={})
     assert resp.status_code == 422, f"Expected 422 for missing refresh_token, got {resp.status_code}"
+
+
+@pytest.mark.asyncio
+async def test_upload_company_logo_rejects_non_image_file(client: AsyncClient, auth_headers: dict):
+    resp = await client.post(
+        "/api/settings/company/logo",
+        headers=auth_headers,
+        files={"file": ("logo.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+    assert resp.status_code == 400, f"Expected 400 for invalid logo MIME type, got {resp.status_code}: {resp.text}"
+    assert "Unsupported image type" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_upload_company_logo_rejects_oversized_file(
+    client: AsyncClient,
+    auth_headers: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "FILE_MAX_SIZE_BYTES", 4)
+    resp = await client.post(
+        "/api/settings/company/logo",
+        headers=auth_headers,
+        files={"file": ("logo.png", b"12345", "image/png")},
+    )
+    assert resp.status_code == 413, f"Expected 413 for oversized logo, got {resp.status_code}: {resp.text}"
+    assert "exceeds maximum" in resp.json()["detail"]
