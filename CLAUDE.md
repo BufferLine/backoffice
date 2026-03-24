@@ -104,10 +104,14 @@ See `.env.example`. Key vars:
 
 ## Git Workflow
 
-- **main에 직접 push 금지** — 항상 feature branch를 만들고 PR을 올릴 것
-- Branch naming: `feat/`, `fix/`, `refactor/`, `test/` + 짧은 설명 (e.g., `feat/airwallex-fx-rate`)
-- PR 올린 후 리뷰/승인 받고 머지
-- 커밋 메시지: conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`)
+- **Never push directly to main** — always create a feature branch and open a PR
+- Branch naming: `feat/`, `fix/`, `refactor/`, `test/` + short description (e.g., `feat/airwallex-fx-rate`)
+- Merge only after review/approval
+- Commit messages: conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`)
+
+## Language
+
+- All code, comments, commit messages, PR descriptions, and documentation must be written in **English**
 
 ## Conventions
 
