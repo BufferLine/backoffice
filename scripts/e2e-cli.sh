@@ -625,11 +625,25 @@ else
   fail "acct loan generate-pdf" "$OUTPUT"
 fi
 
+OUTPUT=$(acct_run loan download "$LOAN_ID" --type agreement -o /tmp)
+if echo "$OUTPUT" | grep -qi "downloaded"; then
+  pass "acct loan download agreement"
+else
+  fail "acct loan download agreement" "$OUTPUT"
+fi
+
 OUTPUT=$(acct_run loan generate-statement "$LOAN_ID")
 if echo "$OUTPUT" | grep -q "document_file_id"; then
   pass "acct loan generate-statement"
 else
   fail "acct loan generate-statement" "$OUTPUT"
+fi
+
+OUTPUT=$(acct_run loan download "$LOAN_ID" --type statement -o /tmp)
+if echo "$OUTPUT" | grep -qi "downloaded"; then
+  pass "acct loan download statement"
+else
+  fail "acct loan download statement" "$OUTPUT"
 fi
 
 # Record a repayment and allocate it to the loan
@@ -675,6 +689,13 @@ if echo "$OUTPUT" | grep -q "document_file_id"; then
   pass "acct loan generate-discharge"
 else
   fail "acct loan generate-discharge" "$OUTPUT"
+fi
+
+OUTPUT=$(acct_run loan download "$LOAN_ID" --type discharge -o /tmp)
+if echo "$OUTPUT" | grep -qi "downloaded"; then
+  pass "acct loan download discharge"
+else
+  fail "acct loan download discharge" "$OUTPUT"
 fi
 
 fi  # LOAN_ID guard

@@ -45,6 +45,9 @@ class LoanResponse(BaseModel):
     maturity_date: Optional[date]
     status: str
     description: Optional[str]
+    agreement_file_id: Optional[UUID] = None
+    latest_statement_file_id: Optional[UUID] = None
+    discharge_file_id: Optional[UUID] = None
     created_by: Optional[UUID]
     created_at: datetime
     updated_at: datetime
