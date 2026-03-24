@@ -1,5 +1,7 @@
 import io
 import uuid
+from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -26,6 +28,19 @@ _DIRECTION_DISPLAY = {
     "inbound": "Borrowed (Company is Borrower)",
     "outbound": "Lent (Company is Lender)",
 }
+
+
+@dataclass(slots=True)
+class LoanRepaymentEntry:
+    """Normalized repayment entry across allocations and legacy direct links."""
+
+    id: uuid.UUID
+    payment_id: uuid.UUID
+    amount: Decimal
+    notes: str | None
+    created_at: datetime
+    payment_date: date | None
+    payment_reference: str | None
 
 
 async def create_loan(
@@ -107,26 +122,77 @@ async def update_loan(
 async def get_loan_balance(
     db: AsyncSession,
     loan_id: uuid.UUID,
-) -> tuple[Decimal, Decimal, Decimal, list[PaymentAllocation]]:
+) -> tuple[Decimal, Decimal, Decimal, list[LoanRepaymentEntry]]:
     """Returns (principal, total_allocated, outstanding, allocations)."""
     loan_result = await db.execute(select(Loan).where(Loan.id == loan_id))
     loan = loan_result.scalar_one_or_none()
     if loan is None:
         raise ValueError(f"Loan {loan_id} not found")
 
-    alloc_result = await db.execute(
-        select(PaymentAllocation).where(
-            PaymentAllocation.entity_type == "loan",
-            PaymentAllocation.entity_id == loan_id,
-        )
-    )
-    allocations = list(alloc_result.scalars().all())
+    allocations = await _get_loan_repayment_entries(db, loan_id)
 
     principal = Decimal(str(loan.principal))
-    total_allocated = sum((Decimal(str(a.amount)) for a in allocations), Decimal("0"))
+    total_allocated = sum((entry.amount for entry in allocations), Decimal("0"))
     outstanding = principal - total_allocated
 
     return principal, total_allocated, outstanding, allocations
+
+
+async def _get_loan_repayment_entries(
+    db: AsyncSession,
+    loan_id: uuid.UUID,
+) -> list[LoanRepaymentEntry]:
+    """Return repayment entries from both allocations and legacy payment links."""
+    alloc_result = await db.execute(
+        select(PaymentAllocation, Payment)
+        .outerjoin(Payment, Payment.id == PaymentAllocation.payment_id)
+        .where(
+            PaymentAllocation.entity_type == "loan",
+            PaymentAllocation.entity_id == loan_id,
+        )
+        .order_by(PaymentAllocation.created_at)
+    )
+    entries: list[LoanRepaymentEntry] = []
+    seen_payment_ids: set[uuid.UUID] = set()
+
+    for allocation, payment in alloc_result.all():
+        seen_payment_ids.add(allocation.payment_id)
+        entries.append(
+            LoanRepaymentEntry(
+                id=allocation.id,
+                payment_id=allocation.payment_id,
+                amount=Decimal(str(allocation.amount)),
+                notes=allocation.notes,
+                created_at=allocation.created_at,
+                payment_date=payment.payment_date if payment else None,
+                payment_reference=payment.bank_reference if payment else None,
+            )
+        )
+
+    legacy_result = await db.execute(
+        select(Payment)
+        .where(
+            Payment.related_entity_type == "loan",
+            Payment.related_entity_id == loan_id,
+        )
+        .order_by(Payment.created_at)
+    )
+    for payment in legacy_result.scalars():
+        if payment.id in seen_payment_ids:
+            continue
+        entries.append(
+            LoanRepaymentEntry(
+                id=payment.id,
+                payment_id=payment.id,
+                amount=Decimal(str(payment.amount)),
+                notes=payment.notes,
+                created_at=payment.created_at,
+                payment_date=payment.payment_date,
+                payment_reference=payment.bank_reference,
+            )
+        )
+
+    return entries
 
 
 async def mark_repaid(
@@ -175,9 +241,11 @@ async def generate_loan_agreement_pdf(
     """Generate loan agreement PDF, upload to storage, return File ID."""
     from app.services.pdf import render_loan_agreement_pdf, _encode_image
 
-    # Load company settings
+    # Load company settings — required for a valid loan agreement
     result = await db.execute(select(CompanySettings).limit(1))
     company = result.scalar_one_or_none()
+    if company is None or not company.legal_name:
+        raise ValueError("Company settings must be configured before generating a loan agreement")
 
     company_data = {}
     if company:
@@ -191,16 +259,15 @@ async def generate_loan_agreement_pdf(
     # Get repayment history via allocations
     _, total_repaid, outstanding, allocations = await get_loan_balance(db, loan.id)
 
-    repayments = []
-    for alloc in allocations:
-        payment_result = await db.execute(select(Payment).where(Payment.id == alloc.payment_id))
-        payment = payment_result.scalar_one_or_none()
-        repayments.append({
-            "date": payment.payment_date if payment else alloc.created_at.date(),
-            "reference": payment.bank_reference if payment else None,
-            "amount": alloc.amount,
-            "notes": alloc.notes,
-        })
+    repayments = [
+        {
+            "date": entry.payment_date or entry.created_at.date(),
+            "reference": entry.payment_reference,
+            "amount": entry.amount,
+            "notes": entry.notes,
+        }
+        for entry in allocations
+    ]
 
     pdf_data = {
         "loan": {

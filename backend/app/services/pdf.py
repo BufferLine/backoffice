@@ -171,7 +171,7 @@ def render_pdf(
     data["theme"] = {**_DEFAULT_THEME, **(theme or {})}
     template = _env.get_template(template_name)
     html_content = template.render(**data)
-    return HTML(string=html_content).write_pdf()
+    return HTML(string=html_content, base_url=str(TEMPLATE_DIR)).write_pdf()
 
 
 # Convenience wrappers for backward compatibility
