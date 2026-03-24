@@ -302,6 +302,39 @@ class TestAirwallexParser:
         with pytest.raises(StopIteration):
             self._parser().parse(BytesIO(b""))
 
+    def test_incomplete_row_skipped(self):
+        """Rows with fewer columns than required should be silently skipped."""
+        csv_data = (
+            b"Transaction ID,Date,Amount,Currency,Counterparty,Reference\n"
+            b"TX-001,2026-01-15,100.00,SGD,Acme,REF-001\n"
+            b"TX-002,2026-01-16\n"  # incomplete — missing amount and currency
+            b"TX-003,2026-01-17,200.00,USD,Beta,REF-003\n"
+        )
+        result = self._parser().parse(BytesIO(csv_data))
+        assert len(result) == 2
+        assert result[0].source_tx_id == "TX-001"
+        assert result[1].source_tx_id == "TX-003"
+
+    def test_row_with_unparseable_date_skipped(self):
+        csv_data = (
+            b"Transaction ID,Date,Amount,Currency\n"
+            b"TX-001,not-a-date,100.00,SGD\n"
+            b"TX-002,2026-03-01,50.00,USD\n"
+        )
+        result = self._parser().parse(BytesIO(csv_data))
+        assert len(result) == 1
+        assert result[0].source_tx_id == "TX-002"
+
+    def test_row_with_unparseable_amount_skipped(self):
+        csv_data = (
+            b"Transaction ID,Date,Amount,Currency\n"
+            b"TX-001,2026-01-15,abc,SGD\n"
+            b"TX-002,2026-01-16,75.00,USD\n"
+        )
+        result = self._parser().parse(BytesIO(csv_data))
+        assert len(result) == 1
+        assert result[0].source_tx_id == "TX-002"
+
 
 # ---------------------------------------------------------------------------
 # GenericParser

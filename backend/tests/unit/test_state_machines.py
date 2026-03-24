@@ -223,20 +223,33 @@ class TestPayrollStateMachine:
         assert exc_info.value.action == "finalize"
 
     def test_cannot_mark_paid_from_draft(self):
-        with pytest.raises(InvalidTransitionError):
+        with pytest.raises(InvalidTransitionError) as exc_info:
             payroll_machine.transition("draft", "mark_paid")
+        assert exc_info.value.current_state == "draft"
+        assert exc_info.value.action == "mark_paid"
 
     def test_cannot_mark_paid_from_reviewed(self):
-        with pytest.raises(InvalidTransitionError):
+        with pytest.raises(InvalidTransitionError) as exc_info:
             payroll_machine.transition("reviewed", "mark_paid")
+        assert exc_info.value.current_state == "reviewed"
+        assert exc_info.value.action == "mark_paid"
 
     def test_cannot_review_from_reviewed(self):
-        with pytest.raises(InvalidTransitionError):
+        with pytest.raises(InvalidTransitionError) as exc_info:
             payroll_machine.transition("reviewed", "review")
+        assert exc_info.value.current_state == "reviewed"
+        assert exc_info.value.action == "review"
 
     def test_cannot_review_from_finalized(self):
         with pytest.raises(InvalidTransitionError):
             payroll_machine.transition("finalized", "review")
+
+    def test_cannot_finalize_from_finalized(self):
+        with pytest.raises(InvalidTransitionError) as exc_info:
+            payroll_machine.transition("finalized", "finalize")
+        assert exc_info.value.entity_type == "payroll"
+        assert exc_info.value.current_state == "finalized"
+        assert exc_info.value.action == "finalize"
 
     def test_cannot_review_from_paid(self):
         with pytest.raises(InvalidTransitionError):

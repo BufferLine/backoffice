@@ -69,17 +69,24 @@ class AirwallexParser(StatementParser):
             raise ValueError("Airwallex CSV missing required columns (Transaction ID, Date, Amount, Currency)")
 
         transactions: list[ParsedTransaction] = []
+        required_max_col = max(col["tx_id"], col["date"], col["amount"], col["currency"])
         for row in reader:
             if not any(cell.strip() for cell in row):
                 continue  # skip blank rows
 
+            if len(row) <= required_max_col:
+                continue  # skip incomplete rows
+
             raw: dict = {headers[i].strip(): row[i].strip() for i in range(min(len(headers), len(row)))}
 
-            tx_id = row[col["tx_id"]].strip()
-            tx_date = _parse_date(row[col["date"]])
-            amount_str = row[col["amount"]].strip().replace(",", "")
-            amount = Decimal(amount_str)
-            currency = row[col["currency"]].strip().upper()
+            try:
+                tx_id = row[col["tx_id"]].strip()
+                tx_date = _parse_date(row[col["date"]])
+                amount_str = row[col["amount"]].strip().replace(",", "")
+                amount = Decimal(amount_str)
+                currency = row[col["currency"]].strip().upper()
+            except (ValueError, IndexError, ArithmeticError):
+                continue  # skip rows with unparseable required fields
 
             counterparty = row[col["counterparty"]].strip() if "counterparty" in col else None
             reference = row[col["reference"]].strip() if "reference" in col else None
