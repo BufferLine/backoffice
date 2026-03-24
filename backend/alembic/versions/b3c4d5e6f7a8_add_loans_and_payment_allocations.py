@@ -54,6 +54,16 @@ def upgrade() -> None:
     op.create_index('ix_payment_allocations_payment_id', 'payment_allocations', ['payment_id'])
     op.create_index('ix_payment_allocations_entity', 'payment_allocations', ['entity_type', 'entity_id'])
 
+    # Data migration: convert existing Payment.related_entity_type/id → PaymentAllocation rows.
+    # This preserves backward compatibility while enabling the new allocation system.
+    op.execute(sa.text("""
+        INSERT INTO payment_allocations (id, payment_id, entity_type, entity_id, amount, created_by, created_at)
+        SELECT gen_random_uuid(), id, related_entity_type, related_entity_id, amount, created_by, created_at
+        FROM payments
+        WHERE related_entity_type IS NOT NULL
+          AND related_entity_id IS NOT NULL
+    """))
+
 
 def downgrade() -> None:
     op.drop_index('ix_payment_allocations_entity', 'payment_allocations')
