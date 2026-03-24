@@ -1,3 +1,4 @@
+import io
 import uuid
 from decimal import Decimal
 from typing import Optional
@@ -5,10 +6,26 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.company import CompanySettings
+from app.models.file import File
 from app.models.loan import Loan
+from app.models.payment import Payment
 from app.models.payment_allocation import PaymentAllocation
 from app.schemas.loan import LoanCreate, LoanUpdate
 from app.services.audit import AuditService
+from app.services.file_storage import FileStorageService
+
+_LOAN_TYPE_DISPLAY = {
+    "shareholder_loan": "Shareholder Loan",
+    "director_loan": "Director Loan",
+    "bank_loan": "Bank Loan",
+    "intercompany_loan": "Intercompany Loan",
+}
+
+_DIRECTION_DISPLAY = {
+    "inbound": "Borrowed (Company is Borrower)",
+    "outbound": "Lent (Company is Lender)",
+}
 
 
 async def create_loan(
@@ -147,3 +164,129 @@ async def write_off_loan(
         output_data={"status": "written_off"},
     )
     return loan
+
+
+async def generate_loan_agreement_pdf(
+    db: AsyncSession,
+    loan: Loan,
+    user_id: uuid.UUID,
+    file_storage: FileStorageService,
+) -> uuid.UUID:
+    """Generate loan agreement PDF, upload to storage, return File ID."""
+    from app.services.pdf import render_loan_agreement_pdf, _encode_image
+
+    # Load company settings
+    result = await db.execute(select(CompanySettings).limit(1))
+    company = result.scalar_one_or_none()
+
+    company_data = {}
+    if company:
+        company_data = {
+            "legal_name": company.legal_name,
+            "uen": company.uen,
+            "address": company.address,
+            "billing_email": company.billing_email,
+        }
+
+    # Get repayment history via allocations
+    _, total_repaid, outstanding, allocations = await get_loan_balance(db, loan.id)
+
+    repayments = []
+    for alloc in allocations:
+        payment_result = await db.execute(select(Payment).where(Payment.id == alloc.payment_id))
+        payment = payment_result.scalar_one_or_none()
+        repayments.append({
+            "date": payment.payment_date if payment else alloc.created_at.date(),
+            "reference": payment.bank_reference if payment else None,
+            "amount": alloc.amount,
+            "notes": alloc.notes,
+        })
+
+    pdf_data = {
+        "loan": {
+            "id": str(loan.id),
+            "loan_type": loan.loan_type,
+            "loan_type_display": _LOAN_TYPE_DISPLAY.get(loan.loan_type, loan.loan_type),
+            "direction": loan.direction,
+            "direction_display": _DIRECTION_DISPLAY.get(loan.direction, loan.direction),
+            "counterparty": loan.counterparty,
+            "currency": loan.currency,
+            "principal": loan.principal,
+            "interest_rate": loan.interest_rate,
+            "interest_type": loan.interest_type,
+            "start_date": loan.start_date,
+            "maturity_date": loan.maturity_date,
+            "description": loan.description,
+        },
+        "company": company_data,
+        "repayments": repayments if repayments else None,
+        "total_repaid": total_repaid,
+        "outstanding": outstanding,
+    }
+
+    # Load branding
+    stamp_bytes, stamp_mime, logo_bytes, logo_mime, theme = None, "image/png", None, "image/png", None
+    if company:
+        if company.stamp_file_id:
+            stamp_file_result = await db.execute(select(File).where(File.id == company.stamp_file_id))
+            stamp_file = stamp_file_result.scalar_one_or_none()
+            if stamp_file:
+                try:
+                    stamp_bytes = file_storage.download(stamp_file.storage_key)
+                    stamp_mime = stamp_file.mime_type or "image/png"
+                except Exception:
+                    pass
+        if company.logo_file_id:
+            logo_file_result = await db.execute(select(File).where(File.id == company.logo_file_id))
+            logo_file = logo_file_result.scalar_one_or_none()
+            if logo_file:
+                try:
+                    logo_bytes = file_storage.download(logo_file.storage_key)
+                    logo_mime = logo_file.mime_type or "image/png"
+                except Exception:
+                    pass
+        theme = {
+            "primary_color": company.primary_color or "#1a56db",
+            "accent_color": company.accent_color or "#374151",
+            "font_family": company.font_family or "Helvetica, Arial, sans-serif",
+        }
+
+    pdf_bytes = render_loan_agreement_pdf(
+        pdf_data,
+        stamp_bytes=stamp_bytes,
+        stamp_mime=stamp_mime,
+        logo_bytes=logo_bytes,
+        logo_mime=logo_mime,
+        theme=theme,
+    )
+
+    filename = f"loan-agreement-{str(loan.id)[:8]}.pdf"
+    storage_key, sha256, size = file_storage.upload(
+        io.BytesIO(pdf_bytes), original_filename=filename, mime_type="application/pdf",
+    )
+
+    file_record = File(
+        storage_key=storage_key,
+        original_filename=filename,
+        mime_type="application/pdf",
+        size_bytes=size,
+        checksum_sha256=sha256,
+        linked_entity_type="loan",
+        linked_entity_id=loan.id,
+    )
+    db.add(file_record)
+    await db.flush()
+
+    # Link to loan
+    loan.document_file_id = file_record.id
+    await db.flush()
+
+    await AuditService(db).log(
+        action="loan.generate_pdf",
+        entity_type="loan",
+        entity_id=loan.id,
+        actor_id=user_id,
+        output_data={"document_file_id": str(file_record.id)},
+    )
+
+    return file_record.id
