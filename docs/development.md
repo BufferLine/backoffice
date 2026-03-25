@@ -90,11 +90,11 @@ scripts/test.sh -k test_invoice
 scripts/test.sh -x --tb=long
 ```
 
-163 tests covering models, services, state machines, and API endpoints.
+378 tests covering models, services, state machines, and API endpoints.
 
 ### `scripts/e2e.sh` — API E2E tests
 
-Runs 31 end-to-end checks against a running server. Requires the server to be up.
+Runs 40 end-to-end checks against a running server. Requires the server to be up.
 
 ```bash
 scripts/e2e.sh
@@ -102,7 +102,7 @@ scripts/e2e.sh
 
 ### `scripts/e2e-cli.sh` — CLI E2E tests
 
-Runs 36 end-to-end checks through the `acct` CLI. Covers the full business workflow from init through month-end export. Requires the server to be up.
+Runs 38 end-to-end checks through the `acct` CLI. Covers the full business workflow from init through month-end export. Requires the server to be up.
 
 ```bash
 scripts/e2e-cli.sh
@@ -144,14 +144,14 @@ Copy `.env.example` to `.env`. Key variables:
 ```
 backend/
   app/
-    api/                  # REST endpoints (~95 endpoints, RBAC enforced)
-    models/               # SQLAlchemy models (20 files, 31 tables)
+    api/                  # REST endpoints (~146 endpoints, RBAC enforced)
+    models/               # SQLAlchemy models (35 tables)
     schemas/              # Pydantic request/response schemas
     services/             # Business logic
     state_machines/       # Invoice, payroll, expense state transitions
     jurisdiction/         # Country-specific tax rules (SG: SDL, CPF, GST)
     export_formatters/    # Pluggable CSV/export formatters
-    statement_parsers/    # Bank statement CSV parsers (Airwallex, DBS, OCBC)
+    statement_parsers/    # Bank statement CSV parsers (Airwallex, generic)
     templates/            # Invoice/payslip PDF templates (Jinja2)
     config.py             # Settings from environment
     database.py           # Async SQLAlchemy engine + session
@@ -163,7 +163,7 @@ cli/
   acct/
     commands/             # One file per domain (invoice, payroll, expense, ...)
 frontend/
-  app/                    # Next.js 15 app router pages
+  app/                    # Next.js 16.2.0 app router pages
 scripts/                  # Dev/test/deploy scripts
 ```
 

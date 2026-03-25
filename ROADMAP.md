@@ -54,10 +54,10 @@ Modular integration architecture: each provider is a plugin with API client, web
 ### Phase 2 — Bank API Sync (Medium effort, high value)
 
 #### Integration Infrastructure
-- [ ] Background task scheduler (APScheduler or Celery) for periodic API polling
-- [ ] Webhook receiver framework with signature verification per provider
+- [x] Background task scheduler (APScheduler) for periodic API polling
+- [x] Webhook receiver framework with signature verification per provider
 - [ ] Rate limiter for outbound API calls (per-provider limits)
-- [ ] `integration_credentials` config pattern (env vars grouped by provider)
+- [x] `integration_credentials` config pattern (env vars grouped by provider)
 
 #### Airwallex API
 - [x] API client module (`AIRWALLEX_CLIENT_ID`, `AIRWALLEX_API_KEY` env vars)

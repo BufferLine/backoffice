@@ -16,11 +16,7 @@ API Layer
 Integration Service (orchestration)
     │
     ├── Provider Registry
-    │   ├── AirwallexProvider
-    │   ├── StripeProvider
-    │   ├── WiseProvider
-    │   ├── EtherscanProvider
-    │   └── XeroProvider
+    │   └── AirwallexProvider  (only implemented provider)
     │
     ├── Webhook Service (verify → dedup → process)
     ├── Sync Scheduler (APScheduler, in-process)
@@ -34,9 +30,16 @@ Existing Services (unchanged)
 
 ## Capability Matrix
 
+### Implemented
+
 | Provider   | sync_txns | sync_balance | webhook | payment_link | transfer | verify_payment | push_invoice |
 |------------|:---------:|:------------:|:-------:|:------------:|:--------:|:--------------:|:------------:|
 | Airwallex  |     ✓     |      ✓       |    ✓    |      -       |    ✓     |       -        |      -       |
+
+### Planned (not yet implemented)
+
+| Provider   | sync_txns | sync_balance | webhook | payment_link | transfer | verify_payment | push_invoice |
+|------------|:---------:|:------------:|:-------:|:------------:|:--------:|:--------------:|:------------:|
 | Stripe     |     -     |      -       |    ✓    |      ✓       |    -     |       -        |      -       |
 | Wise       |     ✓     |      ✓       |    -    |      -       |    ✓     |       -        |      -       |
 | Etherscan  |     -     |      -       |    -    |      -       |    -     |       ✓        |      -       |
@@ -52,11 +55,7 @@ backend/app/integrations/
 ├── exceptions.py            # ProviderAPIError, RateLimitError, WebhookSignatureError
 ├── providers/
 │   ├── __init__.py          # Imports all providers to trigger registration
-│   ├── airwallex.py         # First provider implementation
-│   ├── stripe.py
-│   ├── wise.py
-│   ├── etherscan.py
-│   └── xero.py
+│   └── airwallex.py         # Implemented provider
 
 backend/app/models/integration.py     # IntegrationEvent, SyncState, Config
 backend/app/services/integration.py   # Sync orchestration

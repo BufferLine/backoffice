@@ -27,7 +27,7 @@ System design, data model, and key subsystems.
                     │   FastAPI Backend   │
                     │                    │
                     │  ┌──────────────┐  │
-                    │  │  API Layer   │  │  ~95 endpoints
+                    │  │  API Layer   │  │  ~146 endpoints
                     │  │  (RBAC)      │  │
                     │  └──────┬───────┘  │
                     │  ┌──────▼───────┐  │
@@ -46,7 +46,7 @@ System design, data model, and key subsystems.
    ┌──────────▼──────────┐       ┌────────────▼──────────┐
    │    PostgreSQL 16     │       │   Object Storage       │
    │  (Supabase / local)  │       │  (R2 / MinIO)          │
-   │   31 tables          │       │  PDFs, receipts,       │
+   │   35 tables          │       │  PDFs, receipts,       │
    └─────────────────────┘       │  export ZIPs           │
                                   └────────────────────────┘
 ```
@@ -63,13 +63,13 @@ Key modules:
 
 | Module | Description |
 |--------|-------------|
-| `api/` | REST endpoints with RBAC decorators (~95 endpoints) |
-| `models/` | SQLAlchemy models (31 tables across 20 files) |
+| `api/` | REST endpoints with RBAC decorators (~146 endpoints) |
+| `models/` | SQLAlchemy models (35 tables) |
 | `schemas/` | Pydantic request/response schemas |
 | `services/` | Business logic (invoice, payroll, export, etc.) |
 | `state_machines/` | Transition validation (draft → issued → paid) |
 | `jurisdiction/` | Country-specific tax rules (Singapore: SDL, CPF, GST) |
-| `statement_parsers/` | Bank CSV parsers (Airwallex, DBS, OCBC, generic) |
+| `statement_parsers/` | Bank CSV parsers (Airwallex, generic) |
 | `export_formatters/` | Pluggable export formats (generic CSV, extensible) |
 | `templates/` | Jinja2 HTML templates for invoice and payslip PDFs |
 
@@ -79,7 +79,7 @@ Python Typer + httpx + Rich. The primary execution interface for operators and A
 
 ### Frontend (`frontend/`)
 
-Next.js 15 + TypeScript + Tailwind. Thin dashboard: list, detail, approve, attach, export. Not the primary interface — the CLI is.
+Next.js 16.2.0 + TypeScript + Tailwind. Thin dashboard: list, detail, approve, attach, export. Not the primary interface — the CLI is.
 
 ### Storage
 
@@ -90,13 +90,18 @@ Next.js 15 + TypeScript + Tailwind. Thin dashboard: list, detail, approve, attac
 
 ## Data Model
 
-31 tables grouped by domain.
+35 tables grouped by domain.
 
 ### Identity & Config
 
 | Table | Description |
 |-------|-------------|
 | `users` | Admin and operator accounts |
+| `roles` | Named roles for RBAC |
+| `permissions` | Domain-scoped permission strings |
+| `role_permissions` | Join table: roles ↔ permissions |
+| `user_roles` | Join table: users ↔ roles |
+| `api_tokens` | Long-lived API tokens for CLI/agent access |
 | `company_settings` | Company profile, branding, GST, bank details |
 | `currencies` | Supported currencies with symbol and precision |
 | `setup_tokens` | One-time setup URLs (expire after 1 hour) |
@@ -122,6 +127,14 @@ Next.js 15 + TypeScript + Tailwind. Thin dashboard: list, detail, approve, attac
 | Table | Description |
 |-------|-------------|
 | `payroll_runs` | Monthly payroll runs with SDL, CPF, net salary |
+| `payroll_deductions` | Per-run deduction line items (CPF, SDL, custom) |
+
+### Loans
+
+| Table | Description |
+|-------|-------------|
+| `loans` | Director/shareholder loan records (principal, rate, status) |
+| `payment_allocations` | Allocations of payments to loan repayments |
 
 ### Expenses
 
@@ -160,7 +173,14 @@ Next.js 15 + TypeScript + Tailwind. Thin dashboard: list, detail, approve, attac
 | `task_instances` | Generated task instances per period |
 | `audit_logs` | Every state-changing API call (actor, input, output) |
 | `change_logs` | Field-level diffs on all entity updates |
-| `changelog_entries` | Individual field change records |
+
+### Integrations
+
+| Table | Description |
+|-------|-------------|
+| `integration_events` | Webhook/sync event log with idempotency |
+| `integration_sync_states` | Sync progress per provider per account |
+| `integration_configs` | Runtime config (OAuth tokens, tenant IDs, encrypted) |
 
 ---
 
@@ -255,6 +275,8 @@ New jurisdictions: create a new file in `jurisdiction/`, implement the base clas
 7. Download endpoint streams the file from object storage
 
 Templates support: company logo, stamp image, PayNow QR code, GST breakdown by rate, custom colors and font family.
+
+Document types: invoice, payslip, loan agreement, loan statement, loan discharge letter.
 
 ---
 

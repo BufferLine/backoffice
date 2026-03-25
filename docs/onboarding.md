@@ -34,17 +34,20 @@ This link expires in 1 hour and can only be used once.
 
 ### Quick path (CLI-only, no browser)
 
-If you prefer to stay in the terminal, pass all flags directly:
+If you prefer to stay in the terminal and skip the browser entirely, pass admin credentials directly:
 
 ```bash
 acct init \
   --company-name "Acme Pte Ltd" \
   --jurisdiction SG \
   --uen 202312345A \
-  --api-url https://your-domain.com
+  --api-url https://your-domain.com \
+  --admin-email admin@acme.com \
+  --admin-password "YourSecurePassword" \
+  --admin-name "Admin User"
 ```
 
-Then open the printed URL in a browser to complete admin account creation.
+When `--admin-email`, `--admin-password`, and `--admin-name` are all provided, the admin account is created immediately and no browser URL is printed.
 
 ---
 

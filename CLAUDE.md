@@ -29,17 +29,18 @@ See [docs/testing.md](docs/testing.md) for test tiers, writing guide, and pre-PR
 
 ```
 backend/app/              # Python FastAPI + SQLAlchemy
-  api/                    # REST endpoints (~95 endpoints)
-  models/                 # SQLAlchemy models (31 tables)
+  api/                    # REST endpoints (~146 endpoints)
+  models/                 # SQLAlchemy models (35 tables)
   schemas/                # Pydantic request/response schemas
   services/               # Business logic
   state_machines/         # Invoice, payroll, expense state transitions
   jurisdiction/           # SG tax/deduction rules (modular)
   integrations/           # Provider framework (Airwallex, etc.)
   statement_parsers/      # Bank statement CSV parsers
-  templates/              # Invoice/payslip PDF templates (Jinja2)
+  export_formatters/      # Pluggable export formats (generic CSV, extensible)
+  templates/              # Invoice/payslip/loan PDF templates (Jinja2)
 cli/acct/                 # Python Typer CLI (`acct` command)
-frontend/                 # Next.js 15
+frontend/                 # Next.js 16.2.0
 scripts/                  # Dev/test/deploy scripts
 ```
 
@@ -50,6 +51,7 @@ scripts/                  # Dev/test/deploy scripts
 - **State machines**: invoice (draft→issued→paid/cancelled), payroll (draft→reviewed→finalized→paid), expense (draft→confirmed→reimbursed)
 - **Jurisdiction module**: Singapore SDL/CPF/GST calculations, extensible
 - **Evidence-first**: every financial action produces proof (PDF, receipt, tx hash)
+- **Loan module**: director/shareholder loan ledger with agreement/statement/discharge PDF lifecycle
 
 ## Git Workflow
 
