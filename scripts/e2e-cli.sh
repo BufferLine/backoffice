@@ -457,6 +457,14 @@ fi
 echo ""
 echo "[11. Todo]"
 
+# Generate with --since backfill
+OUTPUT=$(acct_run todo generate --since 2026-01)
+if echo "$OUTPUT" | grep -qi "generated\|up to date"; then
+  pass "acct todo generate --since"
+else
+  fail "acct todo generate --since" "$OUTPUT"
+fi
+
 OUTPUT=$(acct_run todo template-list)
 if echo "$OUTPUT" | grep -qi "SDL\|compliance\|cpf\|gst"; then
   pass "acct todo template-list (compliance templates present)"
@@ -474,6 +482,69 @@ fi
 OUTPUT=$(acct_run todo list)
 # list may be empty for current month — just check it doesn't crash
 pass "acct todo list (no crash)"
+
+# Create ad-hoc task
+OUTPUT=$(acct_run todo add "E2E test task" --category custom --priority high --period 2026-03)
+TODO_ID=$(echo "$OUTPUT" | python3 -c \
+  "import sys,json,re
+lines=sys.stdin.read()
+m=re.search(r'\{.*\}', lines, re.DOTALL)
+if m:
+    print(json.loads(m.group()).get('id',''))
+" 2>/dev/null || true)
+if [ -n "$TODO_ID" ]; then
+  pass "acct todo add ($TODO_ID)"
+else
+  fail "acct todo add" "$OUTPUT"
+  TODO_ID=""
+fi
+
+if [ -n "${TODO_ID:-}" ]; then
+
+# Complete
+OUTPUT=$(acct_run todo complete "$TODO_ID" --notes "Done in CLI E2E")
+if echo "$OUTPUT" | grep -q "completed"; then
+  pass "acct todo complete"
+else
+  fail "acct todo complete" "$OUTPUT"
+fi
+
+# Archive
+OUTPUT=$(acct_run todo archive "$TODO_ID")
+if echo "$OUTPUT" | grep -q "archived"; then
+  pass "acct todo archive"
+else
+  fail "acct todo archive" "$OUTPUT"
+fi
+
+fi  # TODO_ID guard
+
+# Create another task to test skip + archive
+OUTPUT=$(acct_run todo add "E2E skip task" --category custom --priority low --period 2026-03)
+SKIP_ID=$(echo "$OUTPUT" | python3 -c \
+  "import sys,json,re
+lines=sys.stdin.read()
+m=re.search(r'\{.*\}', lines, re.DOTALL)
+if m:
+    print(json.loads(m.group()).get('id',''))
+" 2>/dev/null || true)
+if [ -n "$SKIP_ID" ]; then
+  pass "acct todo add (skip task)"
+
+  OUTPUT=$(acct_run todo skip "$SKIP_ID" --notes "Not needed")
+  if echo "$OUTPUT" | grep -q "skipped"; then
+    pass "acct todo skip"
+  else
+    fail "acct todo skip" "$OUTPUT"
+  fi
+
+  OUTPUT=$(acct_run todo archive "$SKIP_ID")
+  if echo "$OUTPUT" | grep -q "archived"; then
+    pass "acct todo archive (skipped task)"
+  else
+    fail "acct todo archive (skipped task)" "$OUTPUT"
+  fi
+fi
 
 # -------------------------------------------------------------------------
 # 12. Changelog

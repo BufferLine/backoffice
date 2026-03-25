@@ -120,6 +120,35 @@ def add(
 
 
 @app.command()
+def generate(
+    since: Optional[str] = typer.Option(None, "--since", help="Backfill from this month (YYYY-MM) to now"),
+) -> None:
+    """Generate task instances from templates. Use --since to backfill missed periods."""
+    params: dict = {}
+    if since:
+        params["since"] = since
+    data = api_post("/api/tasks/generate", params=params)
+    count = data.get("generated", 0)
+    items = data.get("items", [])
+    if count > 0:
+        print_success(f"{count} task(s) generated")
+        for item in items:
+            typer.echo(f"  {item.get('period', '')} — {item.get('title', '')}")
+    else:
+        typer.echo("No new tasks to generate (all up to date)")
+
+
+@app.command()
+def archive(
+    task_id: str = typer.Argument(..., help="Task instance ID"),
+) -> None:
+    """Archive a completed/skipped task."""
+    data = api_post(f"/api/tasks/{task_id}/archive")
+    print_success(f"Task {task_id} archived")
+    print_json(data)
+
+
+@app.command()
 def upcoming(
     days: int = typer.Option(30, "--days", help="Number of days ahead"),
 ) -> None:

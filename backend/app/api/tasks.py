@@ -39,7 +39,7 @@ async def create_template(
 
 @router.get("/templates", response_model=list[TaskTemplateResponse])
 async def list_templates(
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     category: Optional[str] = None,
     jurisdiction: Optional[str] = None,
@@ -52,7 +52,7 @@ async def list_templates(
 @router.get("/templates/{template_id}", response_model=TaskTemplateResponse)
 async def get_template(
     template_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TaskTemplateResponse:
     try:
@@ -98,7 +98,7 @@ async def delete_template(
 
 @router.get("/todo", response_model=TodoSummary)
 async def get_todo_current(
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TodoSummary:
     period = datetime.now(timezone.utc).strftime("%Y-%m")
@@ -109,7 +109,7 @@ async def get_todo_current(
 @router.get("/todo/{period}", response_model=TodoSummary)
 async def get_todo_period(
     period: str,
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TodoSummary:
     # Only auto-generate for YYYY-MM periods (not quarterly/yearly)
@@ -120,7 +120,7 @@ async def get_todo_period(
 
 @router.get("/upcoming", response_model=list[TaskInstanceResponse])
 async def get_upcoming(
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     days: int = 30,
 ) -> list[TaskInstanceResponse]:
@@ -132,11 +132,35 @@ async def get_upcoming(
 
 @router.get("/overdue", response_model=list[TaskInstanceResponse])
 async def get_overdue(
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[TaskInstanceResponse]:
     items = await task_svc.get_overdue(db)
     return [TaskInstanceResponse.model_validate(i) for i in items]
+
+
+@router.post("/generate")
+async def generate_tasks(
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    since: Optional[str] = None,
+) -> dict:
+    """Generate task instances. With --since, backfill from that month to now."""
+    if since:
+        import re
+        if not re.match(r"^\d{4}-(?:0[1-9]|1[0-2])$", since):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid since format: '{since}'. Expected YYYY-MM (e.g. 2026-01)",
+            )
+        created = await task_svc.generate_since(db, since)
+    else:
+        period = datetime.now(timezone.utc).strftime("%Y-%m")
+        created = await task_svc.generate_instances_for_month(db, period)
+    return {
+        "generated": len(created),
+        "items": [{"id": str(i.id), "title": i.title, "period": i.period} for i in created],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +171,7 @@ async def get_overdue(
 @router.post("", response_model=TaskInstanceResponse, status_code=status.HTTP_201_CREATED)
 async def create_instance(
     data: TaskInstanceCreate,
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:write"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TaskInstanceResponse:
     instance = await task_svc.create_instance(db, data, created_by=current_user.id)
@@ -156,7 +180,7 @@ async def create_instance(
 
 @router.get("", response_model=TaskListResponse)
 async def list_instances(
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     period: Optional[str] = None,
     status: Optional[str] = None,
@@ -176,7 +200,7 @@ async def list_instances(
 @router.get("/{instance_id}", response_model=TaskInstanceResponse)
 async def get_instance(
     instance_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:read"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TaskInstanceResponse:
     try:
@@ -190,7 +214,7 @@ async def get_instance(
 async def update_instance(
     instance_id: uuid.UUID,
     data: TaskInstanceUpdate,
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TaskInstanceResponse:
     try:
@@ -200,31 +224,53 @@ async def update_instance(
     return TaskInstanceResponse.model_validate(instance)
 
 
+@router.post("/{instance_id}/archive", response_model=TaskInstanceResponse)
+async def archive_instance(
+    instance_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TaskInstanceResponse:
+    try:
+        instance = await task_svc.archive_instance(db, instance_id, current_user.id)
+    except ValueError as e:
+        detail = str(e)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    return TaskInstanceResponse.model_validate(instance)
+
+
 @router.post("/{instance_id}/complete", response_model=TaskInstanceResponse)
 async def complete_instance(
     instance_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     notes: Optional[str] = None,
 ) -> TaskInstanceResponse:
     try:
         instance = await task_svc.complete_instance(db, instance_id, current_user.id, notes=notes)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        detail = str(e)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     return TaskInstanceResponse.model_validate(instance)
 
 
 @router.post("/{instance_id}/skip", response_model=TaskInstanceResponse)
 async def skip_instance(
     instance_id: uuid.UUID,
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     notes: Optional[str] = None,
 ) -> TaskInstanceResponse:
     try:
         instance = await task_svc.skip_instance(db, instance_id, current_user.id, notes=notes)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        detail = str(e)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     return TaskInstanceResponse.model_validate(instance)
 
 
@@ -232,7 +278,7 @@ async def skip_instance(
 async def add_note(
     instance_id: uuid.UUID,
     note: str,
-    current_user: Annotated[AuthenticatedUser, Depends(require_permission("expense:read"))],
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("task:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TaskInstanceResponse:
     try:

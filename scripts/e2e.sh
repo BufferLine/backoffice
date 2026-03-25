@@ -277,6 +277,39 @@ else
   fail "Compliance templates seeded" "expected >=10, got: $TASK_COUNT. Response: $(echo "$TASKS" | head -c 200)"
 fi
 
+# Create ad-hoc task
+TASK=$(api -X POST "$API_URL/api/tasks" \
+  -d '{"title":"Test ad-hoc task","category":"custom","priority":"medium","period":"2026-03"}')
+TASK_ID=$(echo "$TASK" | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])" 2>/dev/null || echo "")
+check "Create ad-hoc task" "echo '$TASK'" '"status":"pending"'
+
+if [ -n "$TASK_ID" ]; then
+  # Complete
+  TASK_DONE=$(api -X POST "$API_URL/api/tasks/$TASK_ID/complete?notes=Done%20in%20E2E")
+  check "Complete task" "echo '$TASK_DONE'" '"status":"completed"'
+
+  # Archive
+  TASK_ARC=$(api -X POST "$API_URL/api/tasks/$TASK_ID/archive")
+  check "Archive task" "echo '$TASK_ARC'" '"status":"archived"'
+
+  # Cannot archive again (already archived)
+  ARC_BAD=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/api/tasks/$TASK_ID/archive" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" 2>&1 || echo "000")
+  if [ "$ARC_BAD" = "409" ]; then
+    pass "Cannot re-archive task (409)"
+  else
+    fail "Cannot re-archive task" "expected 409, got $ARC_BAD"
+  fi
+fi
+
+# Generate with --since backfill
+GEN=$(api -X POST "$API_URL/api/tasks/generate?since=2026-01")
+check "Generate tasks (backfill)" "echo '$GEN'" '"generated"'
+
+# Todo summary
+TODO_SUM=$(api "$API_URL/api/tasks/todo")
+check "Todo summary" "echo '$TODO_SUM'" '"period"'
+
 # -------------------------------------------------------------------------
 # Step 10: Loan + Payment Allocation
 # -------------------------------------------------------------------------

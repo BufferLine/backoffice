@@ -119,6 +119,7 @@ async def create_instance(
     )
     db.add(instance)
     await db.flush()
+    await db.refresh(instance)
     return instance
 
 
@@ -140,6 +141,7 @@ async def update_instance(
     for key, value in update_dict.items():
         setattr(instance, key, value)
     await db.flush()
+    await db.refresh(instance)
     return instance
 
 
@@ -150,12 +152,15 @@ async def complete_instance(
     notes: Optional[str] = None,
 ) -> TaskInstance:
     instance = await get_instance(db, instance_id)
+    if instance.status not in ("pending", "in_progress", "overdue"):
+        raise ValueError(f"Cannot complete task with status '{instance.status}'")
     instance.status = "completed"
     instance.completed_at = datetime.now(timezone.utc)
     instance.completed_by = user_id
     if notes is not None:
         instance.notes = notes
     await db.flush()
+    await db.refresh(instance)
     return instance
 
 
@@ -166,10 +171,27 @@ async def skip_instance(
     notes: Optional[str] = None,
 ) -> TaskInstance:
     instance = await get_instance(db, instance_id)
+    if instance.status not in ("pending", "in_progress", "overdue"):
+        raise ValueError(f"Cannot skip task with status '{instance.status}'")
     instance.status = "skipped"
     if notes is not None:
         instance.notes = notes
     await db.flush()
+    await db.refresh(instance)
+    return instance
+
+
+async def archive_instance(
+    db: AsyncSession,
+    instance_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> TaskInstance:
+    instance = await get_instance(db, instance_id)
+    if instance.status not in ("completed", "skipped"):
+        raise ValueError(f"Cannot archive task with status '{instance.status}'. Complete or skip it first.")
+    instance.status = "archived"
+    await db.flush()
+    await db.refresh(instance)
     return instance
 
 
@@ -231,10 +253,13 @@ def _quarter_for_month(month_num: int) -> int:
     return (month_num - 1) // 3 + 1
 
 
-async def generate_instances_for_month(db: AsyncSession, month_str: str) -> list[TaskInstance]:
+async def generate_instances_for_month(
+    db: AsyncSession, month_str: str, *, backfill: bool = False,
+) -> list[TaskInstance]:
     """Create task instances from active recurring templates for a given month.
 
     month_str format: 'YYYY-MM'
+    backfill: if True, skip the unfinished-instance guard (used by generate_since)
     """
     year, month_num = map(int, month_str.split("-"))
     days_in_month = calendar.monthrange(year, month_num)[1]
@@ -296,6 +321,18 @@ async def generate_instances_for_month(db: AsyncSession, month_str: str) -> list
         if existing_result.scalar_one_or_none() is not None:
             continue
 
+        # Skip if template already has an unfinished instance (pending/in_progress/overdue)
+        # Unless backfill mode — backfill creates all missing periods regardless
+        if not backfill:
+            unfinished_result = await db.execute(
+                select(TaskInstance).where(
+                    TaskInstance.template_id == template.id,
+                    TaskInstance.status.in_(["pending", "in_progress", "overdue"]),
+                )
+            )
+            if unfinished_result.first() is not None:
+                continue
+
         instance = TaskInstance(
             template_id=template.id,
             title=template.title,
@@ -308,6 +345,7 @@ async def generate_instances_for_month(db: AsyncSession, month_str: str) -> list
         )
         db.add(instance)
         await db.flush()
+        await db.refresh(instance)
         created.append(instance)
 
     # Mark overdue: pending/in_progress instances from past periods with passed due_date
@@ -326,6 +364,29 @@ async def generate_instances_for_month(db: AsyncSession, month_str: str) -> list
         await db.flush()
 
     return created
+
+
+async def generate_since(db: AsyncSession, since: str) -> list[TaskInstance]:
+    """Backfill task instances from a past month to current month.
+
+    since format: 'YYYY-MM'
+    """
+    since_year, since_month = map(int, since.split("-"))
+    now = datetime.now(timezone.utc)
+    current_year, current_month = now.year, now.month
+
+    all_created: list[TaskInstance] = []
+    y, m = since_year, since_month
+    while (y, m) <= (current_year, current_month):
+        month_str = f"{y:04d}-{m:02d}"
+        created = await generate_instances_for_month(db, month_str, backfill=True)
+        all_created.extend(created)
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+    return all_created
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +463,7 @@ async def add_note(
     else:
         instance.notes = new_note
     await db.flush()
+    await db.refresh(instance)
     return instance
 
 
