@@ -44,6 +44,7 @@ async def create_template(
     )
     db.add(template)
     await db.flush()
+    await db.refresh(template)
     return template
 
 
@@ -57,6 +58,7 @@ async def update_template(
     for key, value in update_dict.items():
         setattr(template, key, value)
     await db.flush()
+    await db.refresh(template)
     return template
 
 
@@ -92,6 +94,7 @@ async def delete_template(db: AsyncSession, template_id: uuid.UUID) -> TaskTempl
         raise ValueError("Cannot delete system task templates")
     template.is_active = False
     await db.flush()
+    await db.refresh(template)
     return template
 
 
@@ -417,6 +420,7 @@ async def create_action_todo(
     )
     db.add(instance)
     await db.flush()
+    await db.refresh(instance)
     return instance
 
 
