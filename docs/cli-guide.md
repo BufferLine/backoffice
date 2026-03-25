@@ -23,13 +23,23 @@ acct --help
 Initialize the backoffice system and get the admin setup URL.
 
 ```bash
-acct init [--api-url URL]
+acct init [--api-url URL] [--admin-email EMAIL] [--admin-password PASSWORD] [--admin-name NAME]
 ```
 
 Prompts for company name, jurisdiction, and UEN. Prints a one-time browser URL to create the admin account.
 
 ```bash
 acct init --api-url https://backoffice.example.com
+```
+
+Pass `--admin-email`, `--admin-password`, and `--admin-name` to create the admin account immediately without opening a browser:
+
+```bash
+acct init \
+  --api-url https://backoffice.example.com \
+  --admin-email admin@example.com \
+  --admin-password "YourSecurePassword" \
+  --admin-name "Admin User"
 ```
 
 ### `acct login`
@@ -389,6 +399,14 @@ acct payment record \
   --chain ethereum
 ```
 
+### `acct payment allocate`
+
+Allocate a payment towards a loan repayment.
+
+```bash
+acct payment allocate --payment-id PAYMENT_ID --loan-id LOAN_ID --amount NUM
+```
+
 ### `acct payment list`
 
 ```bash
@@ -598,6 +616,22 @@ acct todo template-add "CPF payment" --frequency monthly --category payroll --du
 acct todo template-list [--category CAT]
 ```
 
+### `acct todo generate`
+
+Generate task instances from templates for the current or specified period.
+
+```bash
+acct todo generate [--since YYYY-MM-DD]
+```
+
+### `acct todo archive`
+
+Archive completed or skipped tasks older than a given date.
+
+```bash
+acct todo archive [--before YYYY-MM-DD]
+```
+
 ---
 
 ## Exports
@@ -723,10 +757,122 @@ Upload a bank statement CSV for reconciliation.
 acct bank statement-upload /path/to/statement.csv --source SOURCE
 ```
 
-Sources: `airwallex`, `dbs`, `ocbc`.
+Sources: `airwallex`, `generic`.
 
 ### `acct bank tx-list`
 
 ```bash
 acct bank tx-list [--status unmatched|matched|ignored]
+```
+
+---
+
+## Loans
+
+### `acct loan create`
+
+Create a new director/shareholder loan.
+
+```bash
+acct loan create --borrower NAME --principal AMOUNT --currency CODE --rate RATE --start-date YYYY-MM-DD [--interest-type simple|compound]
+```
+
+### `acct loan list`
+
+```bash
+acct loan list [--status active|repaid|written-off]
+```
+
+### `acct loan show`
+
+```bash
+acct loan show LOAN_ID
+```
+
+### `acct loan edit`
+
+Edit a draft loan record.
+
+```bash
+acct loan edit LOAN_ID [--rate RATE] [--notes TEXT]
+```
+
+### `acct loan balance`
+
+Show outstanding balance and accrued interest.
+
+```bash
+acct loan balance LOAN_ID
+```
+
+### `acct loan mark-repaid`
+
+Mark a loan as fully repaid.
+
+```bash
+acct loan mark-repaid LOAN_ID
+```
+
+### `acct loan write-off`
+
+Write off an unrecoverable loan.
+
+```bash
+acct loan write-off LOAN_ID [--reason TEXT]
+```
+
+### `acct loan generate-pdf`
+
+Generate the loan agreement PDF.
+
+```bash
+acct loan generate-pdf LOAN_ID [-o OUTPUT_PATH]
+```
+
+### `acct loan generate-statement`
+
+Generate a loan statement PDF (repayment history + outstanding balance).
+
+```bash
+acct loan generate-statement LOAN_ID [-o OUTPUT_PATH]
+```
+
+### `acct loan generate-discharge`
+
+Generate a discharge letter PDF (issued when loan is fully repaid).
+
+```bash
+acct loan generate-discharge LOAN_ID [-o OUTPUT_PATH]
+```
+
+### `acct loan download`
+
+Download the most recent loan document PDF.
+
+```bash
+acct loan download LOAN_ID [--type agreement|statement|discharge] [-o OUTPUT_PATH]
+```
+
+---
+
+## Integrations
+
+### `acct integration list`
+
+Show configured integration providers and their sync status.
+
+```bash
+acct integration list
+```
+
+### `acct integration events`
+
+View the integration event log for a provider.
+
+```bash
+acct integration events PROVIDER [--limit N]
+```
+
+```bash
+acct integration events airwallex --limit 20
 ```

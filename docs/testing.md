@@ -13,7 +13,7 @@ python scripts/generate-samples.py --open  # Generate + open all sample PDFs for
 
 ## Test Tiers
 
-### Tier 1: Unit Tests (334 tests, ~0.2s)
+### Tier 1: Unit Tests (378 tests, ~0.2s)
 
 Pure logic tests with no database or server dependency.
 
@@ -27,6 +27,9 @@ Pure logic tests with no database or server dependency.
 | `test_schemas.py` | 89 | Pydantic validation, safe_filename, PDF helpers |
 | `test_paynow_qr.py` | 20 | SGQR EMVCo TLV payload generation |
 | `test_airwallex.py` | 11 | Airwallex provider capabilities + FX/payment link |
+| `test_loans.py` | 41 | Loan state machine, interest calculation, repayment logic |
+| `test_loan_service.py` | 2 | Loan service edge cases |
+| `test_pdf.py` | 1 | PDF generation pipeline smoke test |
 
 **Run**: `python -m pytest backend/tests/unit/ -v`
 
