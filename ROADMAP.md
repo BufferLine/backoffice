@@ -136,6 +136,10 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] Loan document lifecycle: Agreement (immutable) / Statement (regeneratable) / Discharge Letter (on completion)
 - [ ] DocuSign integration for e-signatures (via SignatureProvider mixin)
 
+### Task / Todo
+- [ ] User-level task assignment (assign tasks to specific users, filter by assignee)
+- [ ] Task dashboard with workload view per user
+
 ### Payment Methods
 - [ ] Validation: bank type requires bank fields, crypto requires wallet
 
@@ -156,6 +160,11 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] `acct setup-skill --platform claude|codex|gemini` for AI tool integration
 - [ ] Research platform-specific skill/plugin standards as they mature
 - [ ] Multi-step workflow agent mode (natural language → CLI execution)
+
+### Notion Integration
+- [ ] Use Notion as document/data store (tasks, notes, meeting logs)
+- [ ] Sync task instances ↔ Notion database
+- [ ] Store generated PDFs and attachments in Notion pages
 
 ### Infrastructure
 - [x] CI/CD: GitHub Actions for test + lint
