@@ -23,12 +23,13 @@ Pure logic tests with no database or server dependency.
 |------|-------|----------|
 | `test_state_machines.py` | 87 | Invoice/payroll/expense state transitions |
 | `test_jurisdiction.py` | 72 | SG CPF/SDL/GST/proration calculations |
-| `test_parsers.py` | 55 | Airwallex/Generic CSV parsing |
+| `test_parsers.py` | 75 | Airwallex/Generic/DBS CSV/PDF parsing |
 | `test_schemas.py` | 89 | Pydantic validation, safe_filename, PDF helpers |
 | `test_paynow_qr.py` | 20 | SGQR EMVCo TLV payload generation |
 | `test_airwallex.py` | 11 | Airwallex provider capabilities + FX/payment link |
 | `test_loans.py` | 41 | Loan state machine, interest calculation, repayment logic |
 | `test_loan_service.py` | 2 | Loan service edge cases |
+| `test_journal_schema.py` | 15 | Journal entry validation, multi-debit/credit |
 | `test_pdf.py` | 1 | PDF generation pipeline smoke test |
 
 **Run**: `python -m pytest backend/tests/unit/ -v`

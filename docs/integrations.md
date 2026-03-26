@@ -208,3 +208,36 @@ AIRWALLEX_BASE_URL=https://api.airwallex.com
 AIRWALLEX_WEBHOOK_SECRET=xxx
 ENABLE_SYNC_SCHEDULER=true
 ```
+
+## DBS Statement Parser
+
+Parser for DBS/POSB iBanking PDF statements.
+
+### Capabilities
+
+- Multi-currency accounts (SGD, USD, GBP, EUR, JPY, AUD, HKD)
+- Multi-page consolidated statements
+- Automatic counterparty and reference extraction
+- Deterministic transaction IDs for deduplication
+
+### Requirements
+
+- `pdftotext` (from poppler-utils) must be installed on the host:
+  ```bash
+  # macOS
+  brew install poppler
+
+  # Ubuntu/Debian
+  apt-get install poppler-utils
+  ```
+
+### Usage
+
+```bash
+acct bank import \
+  --file statement.pdf \
+  --source dbs \
+  --account <account-id>
+```
+
+The parser uses `pdftotext -layout` to preserve table structure from PDF statements. Multi-currency accounts are automatically split by currency section.

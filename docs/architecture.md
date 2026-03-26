@@ -27,7 +27,7 @@ System design, data model, and key subsystems.
                     │   FastAPI Backend   │
                     │                    │
                     │  ┌──────────────┐  │
-                    │  │  API Layer   │  │  ~146 endpoints
+                    │  │  API Layer   │  │  ~152 endpoints
                     │  │  (RBAC)      │  │
                     │  └──────┬───────┘  │
                     │  ┌──────▼───────┐  │
@@ -46,7 +46,7 @@ System design, data model, and key subsystems.
    ┌──────────▼──────────┐       ┌────────────▼──────────┐
    │    PostgreSQL 16     │       │   Object Storage       │
    │  (Supabase / local)  │       │  (R2 / MinIO)          │
-   │   35 tables          │       │  PDFs, receipts,       │
+   │   37 tables          │       │  PDFs, receipts,       │
    └─────────────────────┘       │  export ZIPs           │
                                   └────────────────────────┘
 ```
@@ -63,13 +63,13 @@ Key modules:
 
 | Module | Description |
 |--------|-------------|
-| `api/` | REST endpoints with RBAC decorators (~146 endpoints) |
-| `models/` | SQLAlchemy models (35 tables) |
+| `api/` | REST endpoints with RBAC decorators (~152 endpoints) |
+| `models/` | SQLAlchemy models (37 tables) |
 | `schemas/` | Pydantic request/response schemas |
 | `services/` | Business logic (invoice, payroll, export, etc.) |
 | `state_machines/` | Transition validation (draft → issued → paid) |
 | `jurisdiction/` | Country-specific tax rules (Singapore: SDL, CPF, GST) |
-| `statement_parsers/` | Bank CSV parsers (Airwallex, generic) |
+| `statement_parsers/` | Bank CSV parsers (DBS, Airwallex, generic) |
 | `export_formatters/` | Pluggable export formats (generic CSV, extensible) |
 | `templates/` | Jinja2 HTML templates for invoice and payslip PDFs |
 
@@ -90,7 +90,7 @@ Next.js 16.2.0 + TypeScript + Tailwind. Thin dashboard: list, detail, approve, a
 
 ## Data Model
 
-35 tables grouped by domain.
+37 tables grouped by domain.
 
 ### Identity & Config
 
@@ -153,7 +153,9 @@ Next.js 16.2.0 + TypeScript + Tailwind. Thin dashboard: list, detail, approve, a
 
 | Table | Description |
 |-------|-------------|
-| `accounts` | Bank, crypto wallet, cash, or virtual accounts |
+| `accounts` | Bank, crypto wallet, cash, or virtual accounts with account_class (asset/liability/equity/revenue/expense) |
+| `journal_entries` | General ledger entries with entry_date, description, source_type, source_id, is_confirmed, confirmed_at/by |
+| `journal_lines` | Individual debit/credit lines per journal entry; balance derived from confirmed lines (CHECK: debit xor credit) |
 | `transactions` | Ledger entries (in/out) with status |
 | `bank_transactions` | Imported bank statement rows |
 | `recurring_commitments` | Scheduled recurring transactions |
@@ -224,6 +226,18 @@ draft ──confirm──→ confirmed ──reimburse──→ reimbursed
 |--------|------|----|
 | `confirm` | draft | confirmed |
 | `reimburse` | confirmed | reimbursed |
+
+---
+
+## Database Security & Accounting Model
+
+**Row Level Security (RLS)** is enabled on all public schema tables to enforce tenant isolation and multi-user access control at the database layer.
+
+**Account Balances** are calculated dynamically from confirmed journal lines using debit-normal (asset, expense) or credit-normal (liability, equity, revenue) conventions:
+- Assets/Expenses: balance = sum(debits) - sum(credits)
+- Liabilities/Equity/Revenue: balance = sum(credits) - sum(debits)
+
+Journal entries must be explicitly confirmed before impacting account balances.
 
 ---
 
