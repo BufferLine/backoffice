@@ -175,6 +175,24 @@ Modular integration architecture: each provider is a plugin with API client, web
 ### Auth / CLI
 - [ ] E2E tests for API token lifecycle (create-token → login --token → whoami → revoke-token)
 
+### Security
+- [ ] Fix bootstrap race condition: concurrent `/api/setup/init` can mint multiple superadmins
+- [ ] Re-check DB permissions on each request instead of trusting JWT-embedded permissions
+- [ ] Encrypt integration secrets at rest (currently plaintext in `integration_configs`)
+- [ ] File upload: validate content via magic bytes, enforce size limit before reading into memory
+
+### Code Quality
+- [ ] Add Ruff + mypy to backend/CLI (frontend already has ESLint)
+- [ ] Replace broad `except Exception: pass` with narrow catches + logging (invoice, payroll, api_client)
+- [ ] Refactor `frontend/src/app/settings/page.tsx` — extract static data and split components
+- [ ] Fix frontend `api.ts` empty-response handling (crashes on 200 with empty body)
+
+### Test Coverage
+- [ ] Endpoint tests: users, setup, bank_reconciliation, exports, loans, payment_methods, files, automation
+- [ ] Service unit tests: payment_allocation, invoice, transaction, integration, automation
+- [ ] Fill partial gaps: auth (logout/token delete), invoices (line-item/PDF), payroll (PDF/delete), expenses (reimburse)
+- [ ] Automate test DB provisioning (testcontainers or docker-compose preflight)
+
 ### Infrastructure
 - [x] CI/CD: GitHub Actions for test + lint
 - [ ] Automated backup strategy
