@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import AuthenticatedUser, require_permission
 from app.database import get_db
 from app.models.file import File
-from app.schemas.payment import PaymentCreate, PaymentLinkRequest, PaymentListResponse, PaymentResponse
+from app.schemas.payment import (
+    PaymentCreate,
+    PaymentLinkRequest,
+    PaymentListResponse,
+    PaymentPipelineRequest,
+    PaymentPipelineResponse,
+    PaymentResponse,
+)
 from app.services.file_storage import FileStorageService, get_file_storage
 from app.schemas.payment_allocation import (
     AllocatePaymentRequest,
@@ -124,6 +131,37 @@ async def attach_proof(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     return PaymentResponse.model_validate(payment)
+
+
+@router.post("/pipeline", response_model=PaymentPipelineResponse, status_code=status.HTTP_201_CREATED)
+async def payment_pipeline(
+    data: PaymentPipelineRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PaymentPipelineResponse:
+    """Full pipeline: create payment from entity → attach proof → attempt bank match.
+
+    Supported entity types: payroll_run, invoice, loan.
+    """
+    try:
+        payment, matched_tx = await payment_svc.create_and_match_payment(
+            db,
+            entity_type=data.entity_type,
+            entity_id=data.entity_id,
+            actor_id=current_user.id,
+            payment_type=data.payment_type,
+        )
+    except ValueError as e:
+        detail = str(e)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+    return PaymentPipelineResponse(
+        payment=PaymentResponse.model_validate(payment),
+        bank_match_tx_id=matched_tx.id if matched_tx else None,
+        bank_match_confidence=float(matched_tx.match_confidence) if matched_tx and matched_tx.match_confidence else None,
+    )
 
 
 @router.post("/{payment_id}/allocate", response_model=AllocatePaymentResponse, status_code=status.HTTP_201_CREATED)

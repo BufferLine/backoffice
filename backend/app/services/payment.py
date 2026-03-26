@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.file import File
 from app.models.invoice import Invoice
+from app.models.loan import Loan
 from app.models.payment import Payment
 from app.models.payroll import PayrollRun
 from app.schemas.payment import PaymentCreate
@@ -289,40 +290,99 @@ async def link_payment(
 
 
 # ---------------------------------------------------------------------------
-# Create payment from payroll (automation helper)
+# Generic payment creation from entity (automation helper)
 # ---------------------------------------------------------------------------
 
 
-async def create_payment_from_payroll(
+def _resolve_entity_details(entity_type: str, entity) -> dict:
+    """Extract amount, currency, proof_file_id, and notes from any supported entity.
+
+    Supports: payroll_run, invoice, loan.
+    Returns dict with keys: amount, currency, proof_file_id, notes.
+    """
+    if entity_type == "payroll_run":
+        if entity.status != "finalized":
+            raise ValueError(f"PayrollRun must be finalized, current: {entity.status}")
+        return {
+            "amount": entity.net_salary,
+            "currency": entity.currency,
+            "proof_file_id": entity.payslip_file_id,
+            "notes": f"Auto-created from payroll for {entity.month.strftime('%B %Y')}",
+        }
+    elif entity_type == "invoice":
+        if entity.status != "issued":
+            raise ValueError(f"Invoice must be issued, current: {entity.status}")
+        return {
+            "amount": entity.total_amount,
+            "currency": entity.currency,
+            "proof_file_id": entity.issued_pdf_file_id,
+            "notes": f"Auto-created from invoice {entity.invoice_number or entity.id}",
+        }
+    elif entity_type == "loan":
+        if entity.status != "active":
+            raise ValueError(f"Loan must be active, current: {entity.status}")
+        return {
+            "amount": entity.principal,
+            "currency": entity.currency,
+            "proof_file_id": entity.agreement_file_id,
+            "notes": f"Auto-created from loan ({entity.loan_type}: {entity.counterparty})",
+        }
+    else:
+        raise ValueError(f"Unsupported entity type for auto-payment: {entity_type}")
+
+
+async def _fetch_entity(db: AsyncSession, entity_type: str, entity_id: uuid.UUID):
+    """Fetch an entity by type and ID."""
+    model_map = {
+        "payroll_run": PayrollRun,
+        "invoice": Invoice,
+        "loan": Loan,
+    }
+    model = model_map.get(entity_type)
+    if model is None:
+        raise ValueError(f"Unsupported entity type: {entity_type}")
+    result = await db.execute(select(model).where(model.id == entity_id))
+    entity = result.scalar_one_or_none()
+    if entity is None:
+        raise ValueError(f"{entity_type} {entity_id} not found")
+    return entity
+
+
+async def create_payment_from_entity(
     db: AsyncSession,
-    payroll_run: PayrollRun,
+    entity_type: str,
+    entity_id: uuid.UUID,
     actor_id: uuid.UUID,
     payment_type: str = "bank_transfer",
 ) -> Payment:
-    """Create a payment record from a finalized payroll run and auto-attach payslip as proof."""
-    if payroll_run.status != "finalized":
-        raise ValueError(f"PayrollRun must be finalized, current: {payroll_run.status}")
+    """Create a payment record from any supported entity and auto-attach proof document.
 
-    reference_number = await generate_reference_number(db, "payroll_run")
+    Supports: payroll_run (payslip PDF), invoice (issued PDF), loan (agreement PDF).
+    Generates a unique reference number and attaches the entity's document as proof.
+    """
+    entity = await _fetch_entity(db, entity_type, entity_id)
+    details = _resolve_entity_details(entity_type, entity)
+
+    reference_number = await generate_reference_number(db, entity_type)
 
     payment = Payment(
         payment_type=payment_type,
-        related_entity_type="payroll_run",
-        related_entity_id=payroll_run.id,
+        related_entity_type=entity_type,
+        related_entity_id=entity_id,
         payment_date=date.today(),
-        currency=payroll_run.currency,
-        amount=payroll_run.net_salary,
+        currency=details["currency"],
+        amount=details["amount"],
         reference_number=reference_number,
         bank_reference=reference_number,
-        notes=f"Auto-created from payroll finalize for {payroll_run.month.strftime('%B %Y')}",
+        notes=details["notes"],
         created_by=actor_id,
     )
     db.add(payment)
     await db.flush()
 
-    # Auto-attach payslip PDF as proof
-    if payroll_run.payslip_file_id:
-        payment.proof_file_id = payroll_run.payslip_file_id
+    # Auto-attach document as proof
+    if details["proof_file_id"]:
+        payment.proof_file_id = details["proof_file_id"]
         await db.flush()
 
     await AuditService(db).log(
@@ -331,9 +391,34 @@ async def create_payment_from_payroll(
         entity_id=payment.id,
         actor_id=actor_id,
         input_data={
-            "payroll_run_id": str(payroll_run.id),
+            "source_entity_type": entity_type,
+            "source_entity_id": str(entity_id),
             "reference_number": reference_number,
-            "auto_proof_attached": payroll_run.payslip_file_id is not None,
+            "auto_proof_attached": details["proof_file_id"] is not None,
         },
     )
     return payment
+
+
+async def create_and_match_payment(
+    db: AsyncSession,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    payment_type: str = "bank_transfer",
+) -> tuple[Payment, Optional["BankTransaction"]]:
+    """Full pipeline: create payment from entity → attach proof → attempt bank match.
+
+    This is the main entry point for automating the payment pipeline.
+    Can be called from CLI, API, or automation scheduler.
+
+    Returns (payment, matched_bank_tx_or_none).
+    """
+    from app.models.bank_transaction import BankTransaction
+    from app.services.bank_reconciliation import try_auto_match_payment
+
+    payment = await create_payment_from_entity(
+        db, entity_type, entity_id, actor_id, payment_type
+    )
+    matched_tx = await try_auto_match_payment(db, payment)
+    return payment, matched_tx

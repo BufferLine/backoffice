@@ -57,3 +57,16 @@ class PaymentListResponse(BaseModel):
 class PaymentLinkRequest(BaseModel):
     related_entity_type: str
     related_entity_id: UUID
+
+
+class PaymentPipelineRequest(BaseModel):
+    """Request to create a payment from an entity with auto-proof and bank matching."""
+    entity_type: str  # payroll_run, invoice, loan
+    entity_id: UUID
+    payment_type: str = "bank_transfer"
+
+
+class PaymentPipelineResponse(BaseModel):
+    payment: PaymentResponse
+    bank_match_tx_id: Optional[UUID] = None
+    bank_match_confidence: Optional[float] = None

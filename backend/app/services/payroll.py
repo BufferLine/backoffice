@@ -357,17 +357,6 @@ async def finalize_payroll(
         created_by=user_id,
     )
 
-    # Auto-create payment record with payslip as proof
-    from app.services.payment import create_payment_from_payroll
-    payment = await create_payment_from_payroll(db, run, actor_id=user_id)
-    run.payment_id = payment.id
-
-    # Attempt auto-match with existing bank transactions
-    from app.services.bank_reconciliation import try_auto_match_payment
-    await try_auto_match_payment(db, payment)
-
-    await db.flush()
-
     return run
 
 

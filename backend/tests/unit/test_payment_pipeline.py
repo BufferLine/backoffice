@@ -1,14 +1,13 @@
-"""Unit tests for payment pipeline automation: reference numbers, match confidence, entity prefixes."""
+"""Unit tests for payment pipeline automation: reference numbers, match confidence, entity resolution."""
 
 import uuid
 from datetime import date, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
 from app.services.bank_reconciliation import _compute_match_confidence
-from app.services.payment import _ENTITY_PREFIX_MAP
+from app.services.payment import _ENTITY_PREFIX_MAP, _resolve_entity_details
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +30,100 @@ class TestEntityPrefixMap:
 
     def test_unknown_entity_not_in_map(self):
         assert "unknown" not in _ENTITY_PREFIX_MAP
+
+
+# ---------------------------------------------------------------------------
+# Entity detail resolution (generic pipeline)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveEntityDetails:
+    def test_payroll_run_finalized(self):
+        entity = SimpleNamespace(
+            status="finalized",
+            net_salary=5000,
+            currency="SGD",
+            payslip_file_id=uuid.uuid4(),
+            month=date(2026, 3, 1),
+        )
+        details = _resolve_entity_details("payroll_run", entity)
+        assert details["amount"] == 5000
+        assert details["currency"] == "SGD"
+        assert details["proof_file_id"] == entity.payslip_file_id
+        assert "payroll" in details["notes"].lower()
+
+    def test_payroll_run_not_finalized_raises(self):
+        entity = SimpleNamespace(status="draft")
+        with pytest.raises(ValueError, match="finalized"):
+            _resolve_entity_details("payroll_run", entity)
+
+    def test_invoice_issued(self):
+        entity = SimpleNamespace(
+            status="issued",
+            total_amount=10000,
+            currency="USD",
+            issued_pdf_file_id=uuid.uuid4(),
+            invoice_number="INV-2026-0001",
+            id=uuid.uuid4(),
+        )
+        details = _resolve_entity_details("invoice", entity)
+        assert details["amount"] == 10000
+        assert details["currency"] == "USD"
+        assert details["proof_file_id"] == entity.issued_pdf_file_id
+        assert "INV-2026-0001" in details["notes"]
+
+    def test_invoice_not_issued_raises(self):
+        entity = SimpleNamespace(status="draft")
+        with pytest.raises(ValueError, match="issued"):
+            _resolve_entity_details("invoice", entity)
+
+    def test_loan_active(self):
+        entity = SimpleNamespace(
+            status="active",
+            principal=50000,
+            currency="SGD",
+            agreement_file_id=uuid.uuid4(),
+            loan_type="director_loan",
+            counterparty="John Director",
+        )
+        details = _resolve_entity_details("loan", entity)
+        assert details["amount"] == 50000
+        assert details["currency"] == "SGD"
+        assert details["proof_file_id"] == entity.agreement_file_id
+        assert "director_loan" in details["notes"]
+        assert "John Director" in details["notes"]
+
+    def test_loan_not_active_raises(self):
+        entity = SimpleNamespace(status="repaid")
+        with pytest.raises(ValueError, match="active"):
+            _resolve_entity_details("loan", entity)
+
+    def test_unsupported_entity_type_raises(self):
+        with pytest.raises(ValueError, match="Unsupported"):
+            _resolve_entity_details("widget", SimpleNamespace())
+
+    def test_payroll_no_payslip_returns_none_proof(self):
+        entity = SimpleNamespace(
+            status="finalized",
+            net_salary=3000,
+            currency="SGD",
+            payslip_file_id=None,
+            month=date(2026, 1, 1),
+        )
+        details = _resolve_entity_details("payroll_run", entity)
+        assert details["proof_file_id"] is None
+
+    def test_invoice_no_pdf_returns_none_proof(self):
+        entity = SimpleNamespace(
+            status="issued",
+            total_amount=1000,
+            currency="SGD",
+            issued_pdf_file_id=None,
+            invoice_number="INV-2026-0002",
+            id=uuid.uuid4(),
+        )
+        details = _resolve_entity_details("invoice", entity)
+        assert details["proof_file_id"] is None
 
 
 # ---------------------------------------------------------------------------
