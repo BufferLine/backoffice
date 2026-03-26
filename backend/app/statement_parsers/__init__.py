@@ -1,9 +1,11 @@
 from app.statement_parsers.airwallex import AirwallexParser
 from app.statement_parsers.base import StatementParser
+from app.statement_parsers.dbs import DBSParser
 from app.statement_parsers.generic import GenericParser
 
 _parsers: dict[str, type[StatementParser]] = {
     "airwallex": AirwallexParser,
+    "dbs": DBSParser,
     "generic": GenericParser,
 }
 

@@ -41,9 +41,9 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [x] Add amount + reference encoding per SGQR spec
 
 #### DBS Statement Parser
-- [ ] Add `DBSParser` for DBS iBanking CSV format
-- [ ] Handle both iBanking and IDEAL (corporate) CSV variants
-- [ ] Register in statement_parsers registry
+- [x] Add `DBSParser` for DBS iBanking PDF statement format
+- [ ] Handle IDEAL (corporate) CSV variant
+- [x] Register in statement_parsers registry
 
 #### Crypto On-chain Verification
 - [ ] Verify `tx_hash` via Etherscan/Polygonscan API after payment recording
@@ -160,6 +160,12 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] `acct setup-skill --platform claude|codex|gemini` for AI tool integration
 - [ ] Research platform-specific skill/plugin standards as they mature
 - [ ] Multi-step workflow agent mode (natural language → CLI execution)
+- [ ] Agent remote memory system (per-agent, per-user persistent context)
+  <!-- Defer until multi-user/multi-agent is actually needed.
+       - Currently single-user; no real demand for memory isolation yet.
+       - Scope unclear: simple key-value vs vector search vs session-based.
+       - AI platforms (Claude, Codex, Gemini) already ship their own memory.
+       - Prioritize business-value items (DBS parser, Stripe, crypto verification) first. -->
 
 ### Notion Integration
 - [ ] Use Notion as document/data store (tasks, notes, meeting logs)
