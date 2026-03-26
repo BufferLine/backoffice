@@ -1,5 +1,6 @@
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 from typing import BinaryIO, Optional
 
 from sqlalchemy import func, select
@@ -9,7 +10,9 @@ from app.models.bank_transaction import BankTransaction
 from app.models.file import File
 from app.models.payment import Payment
 from app.schemas.bank import AutoMatchResult, AutoMatchResultItem
+from app.schemas.journal import JournalEntryCreate, JournalLineCreate
 from app.services.audit import AuditService
+from app.services.journal import create_journal_entry
 from app.statement_parsers import get_parser
 
 
@@ -232,6 +235,78 @@ async def list_transactions(
 
 async def get_transaction(db: AsyncSession, tx_id: uuid.UUID) -> BankTransaction:
     return await _get_transaction(db, tx_id)
+
+
+async def reconcile_transaction(
+    db: AsyncSession,
+    tx_id: uuid.UUID,
+    bank_account_id: uuid.UUID,
+    contra_account_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    description: Optional[str] = None,
+    auto_confirm: bool = True,
+) -> BankTransaction:
+    """Reconcile a bank transaction by creating a journal entry.
+
+    For deposits (amount > 0): debit bank_account, credit contra_account.
+    For withdrawals (amount < 0): debit contra_account, credit bank_account.
+    """
+    tx = await _get_transaction(db, tx_id)
+
+    if tx.match_status == "reconciled":
+        raise ValueError(f"BankTransaction {tx_id} is already reconciled")
+
+    amount = abs(Decimal(str(tx.amount)))
+    is_deposit = Decimal(str(tx.amount)) > 0
+    entry_desc = description or tx.description or f"Bank transaction {tx.source_tx_id}"
+
+    if is_deposit:
+        debit_account = bank_account_id
+        credit_account = contra_account_id
+    else:
+        debit_account = contra_account_id
+        credit_account = bank_account_id
+
+    journal_data = JournalEntryCreate(
+        entry_date=tx.tx_date,
+        description=entry_desc,
+        source_type="bank_import",
+        source_id=tx.id,
+        is_confirmed=auto_confirm,
+        lines=[
+            JournalLineCreate(
+                account_id=debit_account,
+                debit=amount,
+                credit=Decimal("0"),
+                currency=tx.currency,
+            ),
+            JournalLineCreate(
+                account_id=credit_account,
+                debit=Decimal("0"),
+                credit=amount,
+                currency=tx.currency,
+            ),
+        ],
+    )
+
+    entry = await create_journal_entry(db, journal_data, created_by=actor_id)
+
+    tx.match_status = "reconciled"
+    tx.account_id = bank_account_id
+    await db.flush()
+
+    await AuditService(db).log(
+        action="bank_transaction.reconcile",
+        entity_type="bank_transaction",
+        entity_id=tx.id,
+        actor_id=actor_id,
+        input_data={
+            "journal_entry_id": str(entry.id),
+            "bank_account_id": str(bank_account_id),
+            "contra_account_id": str(contra_account_id),
+        },
+    )
+    return tx
 
 
 async def _get_transaction(db: AsyncSession, tx_id: uuid.UUID) -> BankTransaction:

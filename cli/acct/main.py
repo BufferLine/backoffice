@@ -6,6 +6,7 @@ from acct.commands import auth, automation, bank, changelog, client, employee, e
 from acct.commands import account, transaction, commitment
 from acct.commands import payment_method
 from acct.commands import integration, loan
+from acct.commands import journal, report
 from acct.api_client import api_post
 from acct.config import save_credentials
 from acct.formatters import print_success
@@ -32,6 +33,8 @@ app.add_typer(commitment.app, name="commitment")
 app.add_typer(payment_method.app, name="payment-method")
 app.add_typer(integration.app, name="integration")
 app.add_typer(loan.app, name="loan")
+app.add_typer(journal.app, name="journal")
+app.add_typer(report.app, name="report")
 
 
 @app.command()
