@@ -160,6 +160,8 @@ _DEFAULT_PERMISSIONS: list[tuple[str, str, str]] = [
     ("loan", "write", "Create and update loans"),
     ("task", "read", "Read tasks and todo items"),
     ("task", "write", "Create, complete, and archive tasks"),
+    ("journal", "read", "Read journal entries and trial balance"),
+    ("journal", "write", "Create, confirm, and delete journal entries"),
 ]
 
 _DEFAULT_ROLES: list[tuple[str, str, list[str]]] = [
@@ -181,6 +183,7 @@ _DEFAULT_ROLES: list[tuple[str, str, list[str]]] = [
             "integration:read", "integration:write",
             "loan:read", "loan:write",
             "task:read", "task:write",
+            "journal:read", "journal:write",
         ],
     ),
     (
@@ -194,6 +197,7 @@ _DEFAULT_ROLES: list[tuple[str, str, list[str]]] = [
             "export:read", "export:write",
             "loan:read", "loan:write",
             "task:read", "task:write",
+            "journal:read", "journal:write",
         ],
     ),
     (
@@ -207,6 +211,7 @@ _DEFAULT_ROLES: list[tuple[str, str, list[str]]] = [
             "export:read",
             "loan:read",
             "task:read",
+            "journal:read",
         ],
     ),
 ]
