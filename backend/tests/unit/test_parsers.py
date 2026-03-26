@@ -1,4 +1,4 @@
-"""Unit tests for statement parsers (AirwallexParser, GenericParser, get_parser)."""
+"""Unit tests for statement parsers (AirwallexParser, GenericParser, DBSParser, get_parser)."""
 
 from datetime import date
 from decimal import Decimal
@@ -9,6 +9,7 @@ import pytest
 from app.statement_parsers import get_parser
 from app.statement_parsers.airwallex import AirwallexParser
 from app.statement_parsers.base import ParsedTransaction, StatementParser
+from app.statement_parsers.dbs import DBSParser
 from app.statement_parsers.generic import GenericParser
 
 
@@ -82,8 +83,13 @@ class TestGetParser:
         parser = get_parser("generic")
         assert isinstance(parser, GenericParser)
 
+    def test_get_dbs_parser(self):
+        parser = get_parser("dbs")
+        assert isinstance(parser, DBSParser)
+
     def test_all_parsers_are_statement_parsers(self):
         assert isinstance(get_parser("airwallex"), StatementParser)
+        assert isinstance(get_parser("dbs"), StatementParser)
         assert isinstance(get_parser("generic"), StatementParser)
 
     def test_unknown_source_raises_value_error(self):
@@ -556,3 +562,185 @@ class TestGenericParser:
         p1 = GenericParser()
         p2 = GenericParser()
         assert p1._col is not p2._col
+
+
+# ---------------------------------------------------------------------------
+# DBSParser (tests _parse_lines directly to avoid pdftotext dependency)
+# ---------------------------------------------------------------------------
+
+# Simulates pdftotext -layout output
+_DBS_LAYOUT_TEXT = """\
+                                                                                                            Account No. 271-819752-8
+
+                                                                                                             Date           Description                                               Withdrawal (-)      Deposit (+)        Balance
+
+
+                                                                                                              CURRENCY: SINGAPORE DOLLAR
+
+                                                                                                                            Balance Brought Forward                                                                     SGD 2,929.92
+
+                                                                                                             06/01/2026     Advice FAST Collection                                               3.00                       2,926.92
+                                                                                                                            GRABPAY TOPUP SEO SANGWON
+                                                                                                                            C4A484CE68084D95859F8830213A6289
+                                                                                                                            UTILITIES
+                                                                                                             11/01/2026     Advice Funds Transfer                                                4.90                       2,922.02
+                                                                                                                            TOP-UP TO PAYLAH! :
+                                                                                                                            SEO SANGWON
+                                                                                                             13/01/2026     Debit Card Transaction                                                             13.10        2,935.12
+                                                                                                                            DBS VISA DEBIT CASHBACK NOV 12JAN
+                                                                                                                            4628-4500-7358-7165
+                                                                                                             17/01/2026     Cash Accepting Machine Deposit                                                  1,000.00        3,935.12
+                                                                                                                            73587165,SGOON GD24/7B1
+                                                                                                                            Balance Carried Forward                                                                     SGD 3,935.12
+
+                                                                                                            Transaction Details as of 31 Jan 2026                                                                           Page 2 of 4
+
+                                                                                                                Date            Description                                       Withdrawal (-)      Deposit (+)        Balance
+
+
+                                                                                                                                Balance Brought Forward                                                             SGD 3,935.12
+
+                                                                                                                18/01/2026      Advice Funds Transfer                                            3.40                       3,931.72
+                                                                                                                                TOP-UP TO PAYLAH! :
+                                                                                                                                SEO SANGWON
+                                                                                                                31/01/2026      Interest Earned                                                                 0.05        3,931.77
+
+                                                                                                                                Total Balance Carried Forward in SGD:                         11.30        1,013.15        3,931.77
+
+                                                                                                            CURRENCY: UNITED STATES DOLLAR
+
+                                                                                                                            Balance Brought Forward                                                                   USD 8.58
+
+                                                                                                                            Total Balance Carried Forward in USD:                            0.00           0.00           8.58
+"""
+
+
+class TestDBSParser:
+    def _parser(self) -> DBSParser:
+        return DBSParser()
+
+    def _parse(self, text: str = _DBS_LAYOUT_TEXT) -> list[ParsedTransaction]:
+        lines = text.split("\n")
+        account_no = self._parser()._find_account_no(lines)
+        return self._parser()._parse_lines(lines, account_no)
+
+    # --- basic parsing -------------------------------------------------------
+
+    def test_parse_count(self):
+        txns = self._parse()
+        assert len(txns) == 6
+
+    def test_withdrawal(self):
+        txns = self._parse()
+        # First tx: Advice FAST Collection, withdrawal 3.00
+        assert txns[0].amount == Decimal("-3.00")
+        assert txns[0].tx_date == date(2026, 1, 6)
+        assert txns[0].currency == "SGD"
+        assert "Advice FAST Collection" in txns[0].description
+
+    def test_deposit(self):
+        txns = self._parse()
+        # Cashback: deposit 13.10
+        assert txns[2].amount == Decimal("13.10")
+        assert "DBS VISA DEBIT CASHBACK" in txns[2].description
+
+    def test_large_deposit(self):
+        txns = self._parse()
+        # Cash deposit: 1,000.00
+        assert txns[3].amount == Decimal("1000.00")
+        assert "Cash Accepting Machine Deposit" in txns[3].description
+
+    def test_interest(self):
+        txns = self._parse()
+        # Interest Earned: deposit 0.05
+        assert txns[5].amount == Decimal("0.05")
+        assert "Interest Earned" in txns[5].description
+
+    # --- multi-page continuation ---------------------------------------------
+
+    def test_page_continuation(self):
+        txns = self._parse()
+        # Transaction on page 2 after Balance Carried/Brought Forward
+        tx_page2 = txns[4]
+        assert tx_page2.tx_date == date(2026, 1, 18)
+        assert tx_page2.amount == Decimal("-3.40")
+
+    # --- balance tracking ----------------------------------------------------
+
+    def test_balance_tracking(self):
+        txns = self._parse()
+        expected_balances = [
+            Decimal("2926.92"),
+            Decimal("2922.02"),
+            Decimal("2935.12"),
+            Decimal("3935.12"),
+            Decimal("3931.72"),
+            Decimal("3931.77"),
+        ]
+        for tx, expected in zip(txns, expected_balances):
+            assert tx.raw_data["balance"] == str(expected)
+
+    def test_net_change(self):
+        txns = self._parse()
+        total = sum(tx.amount for tx in txns)
+        assert total == Decimal("3931.77") - Decimal("2929.92")
+
+    # --- metadata ------------------------------------------------------------
+
+    def test_account_no(self):
+        txns = self._parse()
+        assert txns[0].raw_data["account_no"] == "271-819752-8"
+
+    def test_counterparty(self):
+        txns = self._parse()
+        # First continuation line = counterparty
+        assert txns[0].counterparty == "GRABPAY TOPUP SEO SANGWON"
+
+    def test_reference_hex(self):
+        txns = self._parse()
+        assert txns[0].reference == "C4A484CE68084D95859F8830213A6289"
+
+    def test_unique_tx_ids(self):
+        txns = self._parse()
+        ids = [tx.source_tx_id for tx in txns]
+        assert len(set(ids)) == len(ids)
+
+    def test_deterministic_tx_ids(self):
+        txns1 = self._parse()
+        txns2 = self._parse()
+        for t1, t2 in zip(txns1, txns2):
+            assert t1.source_tx_id == t2.source_tx_id
+
+    # --- currency sections ---------------------------------------------------
+
+    def test_all_sgd(self):
+        txns = self._parse()
+        assert all(tx.currency == "SGD" for tx in txns)
+
+    def test_usd_section_no_transactions(self):
+        txns = self._parse()
+        usd_txns = [tx for tx in txns if tx.currency == "USD"]
+        assert len(usd_txns) == 0
+
+    # --- edge cases ----------------------------------------------------------
+
+    def test_empty_text(self):
+        assert self._parse("") == []
+
+    def test_no_transactions(self):
+        text = """\
+                                                                                                              CURRENCY: SINGAPORE DOLLAR
+                                                                                                                            Balance Brought Forward                                                                     SGD 100.00
+                                                                                                                            Balance Carried Forward                                                                     SGD 100.00
+"""
+        assert self._parse(text) == []
+
+    def test_withdrawal_raw_data(self):
+        txns = self._parse()
+        assert txns[0].raw_data["withdrawal"] == "3.00"
+        assert txns[0].raw_data["deposit"] is None
+
+    def test_deposit_raw_data(self):
+        txns = self._parse()
+        assert txns[2].raw_data["deposit"] == "13.10"
+        assert txns[2].raw_data["withdrawal"] is None
