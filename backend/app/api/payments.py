@@ -1,12 +1,15 @@
+import io
 import uuid
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AuthenticatedUser, require_permission
 from app.database import get_db
+from app.models.file import File
 from app.schemas.payment import PaymentCreate, PaymentLinkRequest, PaymentListResponse, PaymentResponse
+from app.services.file_storage import FileStorageService, get_file_storage
 from app.schemas.payment_allocation import (
     AllocatePaymentRequest,
     AllocatePaymentResponse,
@@ -79,6 +82,47 @@ async def link_payment(
         if "not found" in detail.lower():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    return PaymentResponse.model_validate(payment)
+
+
+@router.post("/{payment_id}/attach-proof", response_model=PaymentResponse, status_code=status.HTTP_200_OK)
+async def attach_proof(
+    payment_id: uuid.UUID,
+    file: UploadFile,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+) -> PaymentResponse:
+    """Upload and attach a proof/evidence file to a payment."""
+    try:
+        await payment_svc.get_payment(db, payment_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    content = await file.read()
+    storage_key, sha256, size = file_storage.upload(
+        io.BytesIO(content),
+        original_filename=file.filename or "proof",
+        mime_type=file.content_type or "application/octet-stream",
+    )
+
+    file_record = File(
+        storage_key=storage_key,
+        original_filename=file.filename,
+        mime_type=file.content_type,
+        size_bytes=size,
+        checksum_sha256=sha256,
+        uploaded_by=current_user.id,
+        linked_entity_type="payment",
+        linked_entity_id=payment_id,
+    )
+    db.add(file_record)
+    await db.flush()
+
+    try:
+        payment = await payment_svc.attach_proof(db, payment_id, file_record.id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     return PaymentResponse.model_validate(payment)
 
 

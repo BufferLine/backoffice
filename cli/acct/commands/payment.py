@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -78,6 +79,19 @@ def show(
 ) -> None:
     """Show payment details."""
     data = api_get(f"/api/payments/{payment_id}")
+    print_json(data)
+
+
+@app.command()
+def attach(
+    payment_id: str = typer.Argument(..., help="Payment ID"),
+    filepath: Path = typer.Argument(..., help="File path to attach", exists=True),
+) -> None:
+    """Attach a proof/evidence file to a payment."""
+    with open(filepath, "rb") as f:
+        files = {"file": (filepath.name, f, "application/octet-stream")}
+        data = api_post(f"/api/payments/{payment_id}/attach-proof", files=files)
+    print_success(f"Proof attached to payment {payment_id}")
     print_json(data)
 
 

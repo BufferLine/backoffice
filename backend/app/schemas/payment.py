@@ -18,6 +18,7 @@ class PaymentCreate(BaseModel):
     fx_rate_source: Optional[str] = None
     tx_hash: Optional[str] = None
     chain_id: Optional[str] = None
+    reference_number: Optional[str] = None
     bank_reference: Optional[str] = None
     notes: Optional[str] = None
     idempotency_key: Optional[str] = None
@@ -37,6 +38,7 @@ class PaymentResponse(BaseModel):
     sgd_value: Optional[Decimal]
     tx_hash: Optional[str]
     chain_id: Optional[str]
+    reference_number: Optional[str]
     bank_reference: Optional[str]
     proof_file_id: Optional[UUID]
     idempotency_key: Optional[str]

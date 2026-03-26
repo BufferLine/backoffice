@@ -86,8 +86,60 @@ async def import_statement(
     return {"imported_count": imported_count, "skipped_duplicates": skipped_duplicates}
 
 
+def _compute_match_confidence(
+    tx: BankTransaction,
+    payment: Payment,
+) -> float:
+    """Compute match confidence using composite conditions.
+
+    Matching criteria:
+    - Amount + currency match (required, base 0.5)
+    - Reference number match (strong signal, +0.3)
+    - Bank reference / counterparty match (+0.1 each)
+    - Date proximity within +-2 business days (+0.1)
+    """
+    confidence = 0.5  # Base for amount + currency match (already filtered)
+
+    # Reference number match (system-generated, highly reliable)
+    if payment.reference_number and tx.reference:
+        ref_tx = tx.reference.lower().strip()
+        ref_pay = payment.reference_number.lower().strip()
+        if ref_tx == ref_pay or ref_tx in ref_pay or ref_pay in ref_tx:
+            confidence += 0.3
+
+    # Bank reference match
+    if tx.reference and payment.bank_reference:
+        bank_ref_tx = tx.reference.lower()
+        bank_ref_pay = payment.bank_reference.lower()
+        if bank_ref_tx in bank_ref_pay or bank_ref_pay in bank_ref_tx:
+            # Avoid double-counting if reference_number already matched
+            if not (payment.reference_number and tx.reference
+                    and payment.reference_number.lower() in tx.reference.lower()):
+                confidence += 0.1
+
+    # Counterparty match
+    if tx.counterparty and payment.notes:
+        counterparty = tx.counterparty.lower()
+        notes = payment.notes.lower()
+        if counterparty in notes or notes in counterparty:
+            confidence += 0.1
+
+    # Date proximity bonus (within +-2 business days)
+    if payment.payment_date and tx.tx_date:
+        day_diff = abs((tx.tx_date - payment.payment_date).days)
+        if day_diff <= 2:
+            confidence += 0.1
+
+    return min(confidence, 1.0)
+
+
 async def auto_match(db: AsyncSession) -> AutoMatchResult:
-    """Attempt to match unmatched transactions to payments by amount, currency, and date proximity."""
+    """Attempt to match unmatched transactions to payments by composite criteria.
+
+    Matching requires: amount + currency exact match.
+    Then scores on: reference_number, bank_reference, counterparty, date proximity.
+    Only matches with confidence >= 0.8 are accepted.
+    """
     result = await db.execute(
         select(BankTransaction).where(BankTransaction.match_status == "unmatched")
     )
@@ -118,20 +170,8 @@ async def auto_match(db: AsyncSession) -> AutoMatchResult:
         for payment in candidates:
             if payment.id in matched_payment_ids:
                 continue
-            confidence = 0.5  # Base confidence for amount + currency + date match
 
-            # Boost confidence if reference/counterparty matches
-            if tx.reference and payment.bank_reference:
-                ref_tx = tx.reference.lower()
-                ref_pay = payment.bank_reference.lower()
-                if ref_tx in ref_pay or ref_pay in ref_tx:
-                    confidence += 0.3
-
-            if tx.counterparty and payment.notes:
-                counterparty = tx.counterparty.lower()
-                notes = payment.notes.lower()
-                if counterparty in notes or notes in counterparty:
-                    confidence += 0.2
+            confidence = _compute_match_confidence(tx, payment)
 
             if confidence > best_confidence:
                 best_confidence = confidence
@@ -160,6 +200,51 @@ async def auto_match(db: AsyncSession) -> AutoMatchResult:
         unmatched_count=unmatched_count,
         results=results,
     )
+
+
+async def try_auto_match_payment(
+    db: AsyncSession,
+    payment: Payment,
+) -> Optional[BankTransaction]:
+    """Try to match a specific payment against unmatched bank transactions.
+
+    Called automatically after payment creation to attempt immediate matching.
+    Uses composite criteria: amount + currency + reference + date.
+    """
+    if not payment.payment_date:
+        return None
+
+    date_from = payment.payment_date - timedelta(days=3)
+    date_to = payment.payment_date + timedelta(days=3)
+
+    result = await db.execute(
+        select(BankTransaction).where(
+            BankTransaction.match_status == "unmatched",
+            BankTransaction.currency == payment.currency,
+            BankTransaction.amount == payment.amount,
+            BankTransaction.tx_date >= date_from,
+            BankTransaction.tx_date <= date_to,
+        )
+    )
+    candidates = list(result.scalars().all())
+
+    best_tx = None
+    best_confidence = 0.0
+
+    for tx in candidates:
+        confidence = _compute_match_confidence(tx, payment)
+        if confidence > best_confidence:
+            best_confidence = confidence
+            best_tx = tx
+
+    if best_tx is not None and best_confidence >= 0.8:
+        best_tx.matched_payment_id = payment.id
+        best_tx.match_status = "auto_matched"
+        best_tx.match_confidence = round(best_confidence, 2)
+        await db.flush()
+        return best_tx
+
+    return None
 
 
 async def manual_match(

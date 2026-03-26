@@ -1,4 +1,5 @@
 import uuid
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -6,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.file import File
 from app.models.invoice import Invoice
 from app.models.payment import Payment
 from app.models.payroll import PayrollRun
@@ -13,6 +15,48 @@ from app.schemas.payment import PaymentCreate
 from app.services.audit import AuditService
 from app.state_machines.invoice import invoice_machine
 from app.state_machines.payroll import payroll_machine
+
+
+# ---------------------------------------------------------------------------
+# Reference number generator
+# ---------------------------------------------------------------------------
+
+_ENTITY_PREFIX_MAP = {
+    "payroll_run": "PS",
+    "invoice": "INV",
+    "loan": "LN",
+    "expense": "EXP",
+}
+
+
+async def generate_reference_number(
+    db: AsyncSession,
+    entity_type: str,
+) -> str:
+    """Generate a unique reference number like BL-PS-2026-0001."""
+    code = _ENTITY_PREFIX_MAP.get(entity_type, "PAY")
+    year = datetime.now(timezone.utc).year
+    prefix = f"BL-{code}-{year}-"
+
+    result = await db.execute(
+        select(func.max(Payment.reference_number)).where(
+            Payment.reference_number.like(f"{prefix}%")
+        )
+    )
+    max_ref = result.scalar_one_or_none()
+    if max_ref is None:
+        next_num = 1
+    else:
+        try:
+            next_num = int(max_ref.split("-")[-1]) + 1
+        except (ValueError, IndexError):
+            next_num = 1
+    return f"{prefix}{next_num:04d}"
+
+
+# ---------------------------------------------------------------------------
+# Core CRUD
+# ---------------------------------------------------------------------------
 
 
 async def record_payment(
@@ -43,6 +87,11 @@ async def record_payment(
     if data.fx_rate_to_sgd is not None:
         sgd_value = Decimal(str(data.amount)) * Decimal(str(data.fx_rate_to_sgd))
 
+    # Auto-generate reference number if not provided
+    reference_number = data.reference_number
+    if reference_number is None and data.related_entity_type:
+        reference_number = await generate_reference_number(db, data.related_entity_type)
+
     payment = Payment(
         payment_type=data.payment_type,
         related_entity_type=data.related_entity_type,
@@ -56,6 +105,7 @@ async def record_payment(
         sgd_value=sgd_value,
         tx_hash=data.tx_hash,
         chain_id=data.chain_id,
+        reference_number=reference_number,
         bank_reference=data.bank_reference,
         idempotency_key=data.idempotency_key,
         notes=data.notes,
@@ -66,7 +116,7 @@ async def record_payment(
         await db.flush()
     except IntegrityError as e:
         await db.rollback()
-        raise ValueError("Duplicate payment (tx_hash or idempotency_key conflict)") from e
+        raise ValueError("Duplicate payment (tx_hash, idempotency_key, or reference_number conflict)") from e
 
     await AuditService(db).log(
         action="payment.create",
@@ -106,6 +156,43 @@ async def list_payments(
     items = list(result.scalars().all())
 
     return items, total
+
+
+# ---------------------------------------------------------------------------
+# Attach proof file
+# ---------------------------------------------------------------------------
+
+
+async def attach_proof(
+    db: AsyncSession,
+    payment_id: uuid.UUID,
+    file_id: uuid.UUID,
+    actor_id: uuid.UUID,
+) -> Payment:
+    """Attach a proof file to a payment."""
+    payment = await get_payment(db, payment_id)
+
+    result = await db.execute(select(File).where(File.id == file_id))
+    file_record = result.scalar_one_or_none()
+    if file_record is None:
+        raise ValueError(f"File {file_id} not found")
+
+    payment.proof_file_id = file_id
+    await db.flush()
+
+    await AuditService(db).log(
+        action="payment.attach_proof",
+        entity_type="payment",
+        entity_id=payment.id,
+        actor_id=actor_id,
+        input_data={"file_id": str(file_id)},
+    )
+    return payment
+
+
+# ---------------------------------------------------------------------------
+# Link payment to entity
+# ---------------------------------------------------------------------------
 
 
 async def link_payment(
@@ -173,7 +260,6 @@ async def link_payment(
             )
 
         # Transition payroll run to paid
-        from datetime import datetime, timezone
         new_state = payroll_machine.transition(payroll_run.status, "mark_paid")
         payroll_run.status = new_state
         payroll_run.paid_at = datetime.now(tz=timezone.utc)
@@ -198,5 +284,56 @@ async def link_payment(
         entity_id=payment.id,
         actor_id=actor_id,
         input_data={"entity_type": entity_type, "entity_id": str(entity_id)},
+    )
+    return payment
+
+
+# ---------------------------------------------------------------------------
+# Create payment from payroll (automation helper)
+# ---------------------------------------------------------------------------
+
+
+async def create_payment_from_payroll(
+    db: AsyncSession,
+    payroll_run: PayrollRun,
+    actor_id: uuid.UUID,
+    payment_type: str = "bank_transfer",
+) -> Payment:
+    """Create a payment record from a finalized payroll run and auto-attach payslip as proof."""
+    if payroll_run.status != "finalized":
+        raise ValueError(f"PayrollRun must be finalized, current: {payroll_run.status}")
+
+    reference_number = await generate_reference_number(db, "payroll_run")
+
+    payment = Payment(
+        payment_type=payment_type,
+        related_entity_type="payroll_run",
+        related_entity_id=payroll_run.id,
+        payment_date=date.today(),
+        currency=payroll_run.currency,
+        amount=payroll_run.net_salary,
+        reference_number=reference_number,
+        bank_reference=reference_number,
+        notes=f"Auto-created from payroll finalize for {payroll_run.month.strftime('%B %Y')}",
+        created_by=actor_id,
+    )
+    db.add(payment)
+    await db.flush()
+
+    # Auto-attach payslip PDF as proof
+    if payroll_run.payslip_file_id:
+        payment.proof_file_id = payroll_run.payslip_file_id
+        await db.flush()
+
+    await AuditService(db).log(
+        action="payment.auto_create",
+        entity_type="payment",
+        entity_id=payment.id,
+        actor_id=actor_id,
+        input_data={
+            "payroll_run_id": str(payroll_run.id),
+            "reference_number": reference_number,
+            "auto_proof_attached": payroll_run.payslip_file_id is not None,
+        },
     )
     return payment
