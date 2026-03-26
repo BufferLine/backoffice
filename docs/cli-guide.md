@@ -491,20 +491,45 @@ acct payment-method deactivate METHOD_ID
 
 ```bash
 acct account create --name NAME --type TYPE --opening-balance-date YYYY-MM-DD \
-  [--currency CODE] [--institution NAME] [--account-number NUM] \
-  [--wallet-address ADDR] [--opening-balance AMOUNT]
+  [--account-class CLASS] [--currency CODE] [--institution NAME] \
+  [--account-number NUM] [--wallet-address ADDR] [--opening-balance AMOUNT]
 ```
 
 Account types: `bank`, `crypto_wallet`, `cash`, `virtual`.
+Account classes: `asset`, `liability`, `equity`, `revenue`, `expense`.
 
 ```bash
+# Bank account (asset)
 acct account create \
   --name "DBS SGD" \
   --type bank \
+  --account-class asset \
   --currency SGD \
   --institution "DBS Bank" \
   --opening-balance 50000 \
   --opening-balance-date 2026-01-01
+
+# Expense account (virtual)
+acct account create \
+  --name "Salary Expense" \
+  --type virtual \
+  --account-class expense \
+  --currency SGD \
+  --opening-balance-date 2026-01-01
+```
+
+### `acct account update`
+
+Update an existing account's name, class, institution, or other fields.
+
+```bash
+acct account update ACCOUNT_ID [--name NAME] [--account-class CLASS] \
+  [--institution NAME] [--account-number NUM] [--statement-source SRC] \
+  [--active BOOL]
+```
+
+```bash
+acct account update abc123 --account-class liability
 ```
 
 ### `acct account list`
@@ -512,6 +537,8 @@ acct account create \
 ```bash
 acct account list [--page N] [--per-page N]
 ```
+
+Shows ID, Name, Type, Class, Currency, Institution, and Active columns.
 
 ### `acct account balance`
 
