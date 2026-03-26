@@ -119,6 +119,20 @@ async def logout(
     return None
 
 
+@router.get("/api-tokens", response_model=list[ApiTokenResponse])
+async def list_tokens(
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[ApiTokenResponse]:
+    """List all API tokens for the current user (excluding revoked)."""
+    result = await db.execute(
+        select(ApiToken)
+        .where(ApiToken.user_id == current_user.id, ApiToken.revoked_at.is_(None))
+        .order_by(ApiToken.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 @router.post("/api-tokens", response_model=ApiTokenCreated, status_code=status.HTTP_201_CREATED)
 async def create_token(
     body: ApiTokenCreate,

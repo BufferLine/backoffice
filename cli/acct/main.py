@@ -93,12 +93,13 @@ def init(
 
 @app.command()
 def login(
-    email: str = typer.Option(..., prompt=True),
-    password: str = typer.Option(..., prompt=True, hide_input=True),
+    email: str = typer.Option(None, help="Email address"),
+    password: str = typer.Option(None, help="Password", hide_input=True),
+    token: str = typer.Option(None, help="API token (alternative to email/password)"),
     api_url: str = typer.Option("http://localhost:8000", help="API base URL"),
 ) -> None:
     """Login to the backoffice system."""
-    auth.login(email=email, password=password, api_url=api_url)
+    auth.login(email=email, password=password, token=token, api_url=api_url)
 
 
 @app.command()
