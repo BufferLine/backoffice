@@ -12,9 +12,12 @@ app = typer.Typer(help="Account management commands")
 def list_accounts(
     page: int = typer.Option(1, "--page", help="Page number"),
     per_page: int = typer.Option(20, "--per-page", help="Items per page"),
+    include_inactive: bool = typer.Option(False, "--include-inactive", help="Include deactivated accounts"),
 ) -> None:
     """List all accounts."""
     params: dict = {"page": page, "per_page": per_page}
+    if include_inactive:
+        params["include_inactive"] = "true"
     data = api_get("/api/accounts", params=params)
     items = data if isinstance(data, list) else data.get("items", [])
     print_table(
@@ -85,17 +88,21 @@ def update(
     institution: Optional[str] = typer.Option(None, "--institution", help="Institution name"),
     account_number: Optional[str] = typer.Option(None, "--account-number", help="Account number"),
     statement_source: Optional[str] = typer.Option(None, "--statement-source", help="Statement source"),
-    is_active: Optional[bool] = typer.Option(None, "--active", help="Active status"),
+    activate: bool = typer.Option(False, "--activate", help="Activate account"),
+    deactivate: bool = typer.Option(False, "--deactivate", help="Deactivate account"),
 ) -> None:
     """Update an existing account."""
-    field_map = {
+    field_map: dict = {
         "name": name,
         "account_class": account_class,
         "institution": institution,
         "account_number": account_number,
         "statement_source": statement_source,
-        "is_active": is_active,
     }
+    if activate:
+        field_map["is_active"] = True
+    elif deactivate:
+        field_map["is_active"] = False
     payload = {k: v for k, v in field_map.items() if v is not None}
     if not payload:
         typer.echo("No options provided. Use --help to see available options.")

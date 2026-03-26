@@ -62,8 +62,11 @@ async def list_accounts(
     db: AsyncSession,
     page: int = 1,
     per_page: int = 20,
+    include_inactive: bool = False,
 ) -> tuple[list[Account], int]:
     query = select(Account)
+    if not include_inactive:
+        query = query.where(Account.is_active == True)  # noqa: E712
 
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
