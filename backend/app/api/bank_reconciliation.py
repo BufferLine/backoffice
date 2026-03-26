@@ -11,6 +11,7 @@ from app.schemas.bank import (
     BankTransactionListResponse,
     BankTransactionResponse,
     BankTxMatchRequest,
+    BankTxReconcileRequest,
 )
 from app.services import bank_reconciliation as bank_svc
 
@@ -91,6 +92,30 @@ async def match_bank_transaction(
 ) -> BankTransactionResponse:
     try:
         tx = await bank_svc.manual_match(db, tx_id, data.payment_id, current_user.id)
+    except ValueError as e:
+        detail = str(e)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    return BankTransactionResponse.model_validate(tx)
+
+
+@router.post("/bank-transactions/{tx_id}/reconcile", response_model=BankTransactionResponse)
+async def reconcile_bank_transaction(
+    tx_id: uuid.UUID,
+    data: BankTxReconcileRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> BankTransactionResponse:
+    try:
+        tx = await bank_svc.reconcile_transaction(
+            db, tx_id,
+            bank_account_id=data.bank_account_id,
+            contra_account_id=data.contra_account_id,
+            actor_id=current_user.id,
+            description=data.description,
+            auto_confirm=data.auto_confirm,
+        )
     except ValueError as e:
         detail = str(e)
         if "not found" in detail.lower():

@@ -79,6 +79,28 @@ def tx_auto_match() -> None:
 
 
 @app.command()
+def tx_reconcile(
+    tx_id: str = typer.Argument(..., help="Bank transaction ID"),
+    bank_account: str = typer.Option(..., "--bank-account", help="Bank account ID (asset)"),
+    contra_account: str = typer.Option(..., "--contra-account", help="Contra account ID (expense/revenue/etc)"),
+    description: Optional[str] = typer.Option(None, "--description", help="Journal entry description"),
+    no_confirm: bool = typer.Option(False, "--no-confirm", help="Create as unconfirmed"),
+) -> None:
+    """Reconcile a bank transaction by creating a journal entry."""
+    data = api_post(
+        f"/api/bank-transactions/{tx_id}/reconcile",
+        json_data={
+            "bank_account_id": bank_account,
+            "contra_account_id": contra_account,
+            "description": description,
+            "auto_confirm": not no_confirm,
+        },
+    )
+    print_success(f"Transaction {tx_id} reconciled")
+    print_json(data)
+
+
+@app.command()
 def tx_ignore(
     tx_id: str = typer.Argument(..., help="Bank transaction ID to ignore"),
 ) -> None:

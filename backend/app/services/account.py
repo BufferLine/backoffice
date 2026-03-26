@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
-from app.models.transaction import Transaction
+from app.models.journal import JournalEntry, JournalLine
 from app.schemas.account import AccountBalanceResponse, AccountCreate, AccountUpdate
 
 
@@ -18,6 +18,7 @@ async def create_account(
     account = Account(
         name=data.name,
         account_type=data.account_type,
+        account_class=data.account_class,
         currency=data.currency,
         institution=data.institution,
         account_number=data.account_number,
@@ -74,36 +75,44 @@ async def list_accounts(
 
 
 async def get_balance(db: AsyncSession, account_id: uuid.UUID) -> AccountBalanceResponse:
+    """Calculate account balance from confirmed journal lines (double-entry)."""
     account = await get_account(db, account_id)
 
-    inflow_result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-            Transaction.account_id == account_id,
-            Transaction.direction == "in",
-            Transaction.status == "confirmed",
+    debit_result = await db.execute(
+        select(func.coalesce(func.sum(JournalLine.debit), 0))
+        .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+        .where(
+            JournalLine.account_id == account_id,
+            JournalEntry.is_confirmed.is_(True),
         )
     )
-    confirmed_in = Decimal(str(inflow_result.scalar_one()))
+    total_debit = Decimal(str(debit_result.scalar_one()))
 
-    outflow_result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-            Transaction.account_id == account_id,
-            Transaction.direction == "out",
-            Transaction.status == "confirmed",
+    credit_result = await db.execute(
+        select(func.coalesce(func.sum(JournalLine.credit), 0))
+        .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+        .where(
+            JournalLine.account_id == account_id,
+            JournalEntry.is_confirmed.is_(True),
         )
     )
-    confirmed_out = Decimal(str(outflow_result.scalar_one()))
+    total_credit = Decimal(str(credit_result.scalar_one()))
 
     opening = Decimal(str(account.opening_balance))
-    current = opening + confirmed_in - confirmed_out
+    # For asset/expense accounts: balance = opening + debits - credits
+    # For liability/equity/revenue accounts: balance = opening + credits - debits
+    if account.account_class in ("liability", "equity", "revenue"):
+        current = opening + total_credit - total_debit
+    else:
+        current = opening + total_debit - total_credit
 
     return AccountBalanceResponse(
         account_id=account.id,
         account_name=account.name,
         currency=account.currency,
         opening_balance=opening,
-        confirmed_inflows=confirmed_in,
-        confirmed_outflows=confirmed_out,
+        confirmed_inflows=total_debit,
+        confirmed_outflows=total_credit,
         current_balance=current,
     )
 

@@ -36,6 +36,13 @@ class BankTxMatchRequest(BaseModel):
     payment_id: UUID
 
 
+class BankTxReconcileRequest(BaseModel):
+    bank_account_id: UUID
+    contra_account_id: UUID
+    description: Optional[str] = None
+    auto_confirm: bool = True
+
+
 class AutoMatchResultItem(BaseModel):
     tx_id: UUID
     payment_id: UUID

@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import func, select
@@ -40,7 +41,7 @@ async def record_payment(
     # Compute SGD value if fx_rate provided
     sgd_value = None
     if data.fx_rate_to_sgd is not None:
-        sgd_value = float(data.amount) * float(data.fx_rate_to_sgd)
+        sgd_value = Decimal(str(data.amount)) * Decimal(str(data.fx_rate_to_sgd))
 
     payment = Payment(
         payment_type=data.payment_type,
