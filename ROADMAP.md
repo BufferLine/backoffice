@@ -143,9 +143,22 @@ Modular integration architecture: each provider is a plugin with API client, web
 ### Payment Methods
 - [ ] Validation: bank type requires bank fields, crypto requires wallet
 
+### Double-Entry Bookkeeping
+- [x] JournalEntry + JournalLine models (debit/credit with balance constraint)
+- [x] Account classification (asset/liability/equity/revenue/expense)
+- [x] Journal service: CRUD, confirm, trial balance, account ledger
+- [x] Reconciliation → JournalEntry auto-creation
+- [x] Account balance from journal lines (debit-normal / credit-normal)
+- [x] API: /api/journal-entries, /api/journal-entries/trial-balance, reconcile endpoint
+- [x] CLI: acct journal, acct report trial-balance, acct bank tx-reconcile
+- [x] Fix float → Decimal in payment SGD calculation
+- [ ] Agent-assisted categorization (auto-classify bank transactions)
+- [ ] Income statement (P&L) report
+- [ ] Balance sheet report
+- [ ] Deprecate old Transaction table after full transition
+
 ### Accounts & Balance
 - [ ] Monthly cashflow chart (inflow/outflow by category)
-- [ ] Auto-create transaction when payment is linked
 - [ ] Recurring commitment → pending transaction auto-match with bank import
 
 ### Frontend
