@@ -166,6 +166,9 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] Sync task instances ↔ Notion database
 - [ ] Store generated PDFs and attachments in Notion pages
 
+### Auth / CLI
+- [ ] E2E tests for API token lifecycle (create-token → login --token → whoami → revoke-token)
+
 ### Infrastructure
 - [x] CI/CD: GitHub Actions for test + lint
 - [ ] Automated backup strategy
