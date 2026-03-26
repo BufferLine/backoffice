@@ -30,8 +30,9 @@ async def list_accounts(
     db: Annotated[AsyncSession, Depends(get_db)],
     page: int = 1,
     per_page: int = 20,
+    include_inactive: bool = False,
 ) -> AccountListResponse:
-    items, total = await account_svc.list_accounts(db, page=page, per_page=per_page)
+    items, total = await account_svc.list_accounts(db, page=page, per_page=per_page, include_inactive=include_inactive)
     return AccountListResponse(
         items=[AccountResponse.model_validate(a) for a in items],
         total=total,
