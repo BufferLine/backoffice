@@ -9,6 +9,7 @@ from pydantic import BaseModel
 class AccountCreate(BaseModel):
     name: str
     account_type: str
+    account_class: Optional[str] = None
     currency: str
     institution: Optional[str] = None
     account_number: Optional[str] = None
@@ -23,6 +24,7 @@ class AccountCreate(BaseModel):
 
 class AccountUpdate(BaseModel):
     name: Optional[str] = None
+    account_class: Optional[str] = None
     institution: Optional[str] = None
     account_number: Optional[str] = None
     wallet_address: Optional[str] = None
@@ -36,6 +38,7 @@ class AccountResponse(BaseModel):
     id: UUID
     name: str
     account_type: str
+    account_class: Optional[str]
     currency: str
     institution: Optional[str]
     account_number: Optional[str]
