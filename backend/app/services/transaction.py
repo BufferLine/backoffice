@@ -128,6 +128,7 @@ async def update_transaction(
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(tx, field, value)
     await db.flush()
+    await db.refresh(tx)
     return tx
 
 

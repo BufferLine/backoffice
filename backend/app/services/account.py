@@ -33,6 +33,7 @@ async def create_account(
     )
     db.add(account)
     await db.flush()
+    await db.refresh(account)
     return account
 
 
@@ -53,6 +54,7 @@ async def update_account(
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(account, field, value)
     await db.flush()
+    await db.refresh(account)
     return account
 
 

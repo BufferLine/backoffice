@@ -1,6 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
+
+AccountClassType = Literal["asset", "liability", "equity", "revenue", "expense"]
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -9,7 +11,7 @@ from pydantic import BaseModel
 class AccountCreate(BaseModel):
     name: str
     account_type: str
-    account_class: Optional[str] = None
+    account_class: Optional[AccountClassType] = None
     currency: str
     institution: Optional[str] = None
     account_number: Optional[str] = None
@@ -24,7 +26,7 @@ class AccountCreate(BaseModel):
 
 class AccountUpdate(BaseModel):
     name: Optional[str] = None
-    account_class: Optional[str] = None
+    account_class: Optional[AccountClassType] = None
     institution: Optional[str] = None
     account_number: Optional[str] = None
     wallet_address: Optional[str] = None

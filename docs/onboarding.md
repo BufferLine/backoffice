@@ -86,15 +86,21 @@ Before processing transactions, optionally set up your chart of accounts:
 ```bash
 acct account create \
   --name "DBS Operating" \
+  --type bank \
   --account-class asset \
-  --currency SGD
+  --currency SGD \
+  --institution "DBS Bank" \
+  --opening-balance-date 2026-01-01
 
 acct account create \
   --name "Business Expenses" \
+  --type virtual \
   --account-class expense \
-  --currency SGD
+  --currency SGD \
+  --opening-balance-date 2026-01-01
 ```
 
+Account types: `bank`, `crypto_wallet`, `cash`, `virtual`.
 Account classes: `asset`, `liability`, `equity`, `revenue`, `expense`.
 
 ---

@@ -32,6 +32,7 @@ async def create_expense(
     )
     db.add(expense)
     await db.flush()
+    await db.refresh(expense)
     await AuditService(db).log(
         action="expense.create",
         entity_type="expense",
@@ -54,6 +55,7 @@ async def update_expense(
     for key, value in update_dict.items():
         setattr(expense, key, value)
     await db.flush()
+    await db.refresh(expense)
     return expense
 
 

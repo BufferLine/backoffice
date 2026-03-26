@@ -263,6 +263,7 @@ async def update_invoice(
         invoice.payment_method_id = payment_method_id
 
     await db.flush()
+    await db.refresh(invoice)
     return invoice
 
 

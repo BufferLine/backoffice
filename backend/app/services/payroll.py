@@ -63,6 +63,7 @@ async def create_employee(db: AsyncSession, data: dict, created_by: uuid.UUID) -
     )
     db.add(employee)
     await db.flush()
+    await db.refresh(employee)
     return employee
 
 
@@ -78,6 +79,7 @@ async def update_employee(db: AsyncSession, employee_id: uuid.UUID, data: dict) 
             setattr(employee, field, data[field])
 
     await db.flush()
+    await db.refresh(employee)
     return employee
 
 
@@ -178,6 +180,7 @@ async def create_payroll_run(
         db.add(deduction)
 
     await db.flush()
+    await db.refresh(run)
     return run
 
 

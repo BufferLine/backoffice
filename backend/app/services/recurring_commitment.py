@@ -34,6 +34,7 @@ async def create_commitment(
     )
     db.add(commitment)
     await db.flush()
+    await db.refresh(commitment)
     return commitment
 
 
@@ -56,6 +57,7 @@ async def update_commitment(
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(commitment, field, value)
     await db.flush()
+    await db.refresh(commitment)
     return commitment
 
 
@@ -84,6 +86,7 @@ async def deactivate_commitment(
     commitment = await get_commitment(db, commitment_id)
     commitment.is_active = False
     await db.flush()
+    await db.refresh(commitment)
     return commitment
 
 
