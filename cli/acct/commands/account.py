@@ -19,12 +19,13 @@ def list_accounts(
     items = data if isinstance(data, list) else data.get("items", [])
     print_table(
         "Accounts",
-        ["ID", "Name", "Type", "Currency", "Institution", "Active"],
+        ["ID", "Name", "Type", "Class", "Currency", "Institution", "Active"],
         [
             [
                 a.get("id", ""),
                 a.get("name", ""),
                 a.get("account_type", ""),
+                a.get("account_class", "") or "-",
                 a.get("currency", ""),
                 a.get("institution", ""),
                 str(a.get("is_active", "")),
@@ -47,6 +48,7 @@ def show(
 def create(
     name: str = typer.Option(..., "--name", help="Account name"),
     account_type: str = typer.Option(..., "--type", help="Account type: bank|crypto_wallet|cash|virtual"),
+    account_class: Optional[str] = typer.Option(None, "--account-class", help="Account class: asset|liability|equity|revenue|expense"),
     currency: str = typer.Option("SGD", "--currency", help="Currency code"),
     institution: Optional[str] = typer.Option(None, "--institution", help="Institution name"),
     account_number: Optional[str] = typer.Option(None, "--account-number", help="Account number"),
@@ -62,6 +64,8 @@ def create(
         "opening_balance": str(opening_balance),
         "opening_balance_date": opening_balance_date,
     }
+    if account_class:
+        payload["account_class"] = account_class
     if institution:
         payload["institution"] = institution
     if account_number:
@@ -70,6 +74,34 @@ def create(
         payload["wallet_address"] = wallet_address
     data = api_post("/api/accounts", json_data=payload)
     print_success(f"Account created: {data['id']}")
+    print_json(data)
+
+
+@app.command()
+def update(
+    account_id: str = typer.Argument(..., help="Account ID"),
+    name: Optional[str] = typer.Option(None, "--name", help="Account name"),
+    account_class: Optional[str] = typer.Option(None, "--account-class", help="Account class: asset|liability|equity|revenue|expense"),
+    institution: Optional[str] = typer.Option(None, "--institution", help="Institution name"),
+    account_number: Optional[str] = typer.Option(None, "--account-number", help="Account number"),
+    statement_source: Optional[str] = typer.Option(None, "--statement-source", help="Statement source"),
+    is_active: Optional[bool] = typer.Option(None, "--active", help="Active status"),
+) -> None:
+    """Update an existing account."""
+    field_map = {
+        "name": name,
+        "account_class": account_class,
+        "institution": institution,
+        "account_number": account_number,
+        "statement_source": statement_source,
+        "is_active": is_active,
+    }
+    payload = {k: v for k, v in field_map.items() if v is not None}
+    if not payload:
+        typer.echo("No options provided. Use --help to see available options.")
+        raise typer.Exit(1)
+    data = api_patch(f"/api/accounts/{account_id}", json_data=payload)
+    print_success("Account updated")
     print_json(data)
 
 

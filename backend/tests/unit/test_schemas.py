@@ -19,6 +19,7 @@ from app.schemas.invoice import (
 )
 from app.schemas.payment import PaymentCreate, PaymentLinkRequest
 from app.schemas.expense import ExpenseCreate
+from app.schemas.account import AccountCreate, AccountUpdate
 from app.services.file_storage import safe_filename, ALLOWED_MIME_TYPES
 from app.services.pdf import _money, _pct
 from app.config import _WEAK_JWT_SECRETS
@@ -513,3 +514,39 @@ class TestWeakJwtSecrets:
 
     def test_strong_secret_not_in_weak_set(self):
         assert "a_very_secure_random_jwt_secret_abc123" not in _WEAK_JWT_SECRETS
+
+
+# ---------------------------------------------------------------------------
+# AccountCreate / AccountUpdate — account_class validation
+# ---------------------------------------------------------------------------
+
+class TestAccountClassValidation:
+    """Ensure account_class only accepts valid accounting classes."""
+
+    _BASE = {
+        "name": "Test Account",
+        "account_type": "virtual",
+        "currency": "SGD",
+        "opening_balance_date": "2026-01-01",
+    }
+
+    @pytest.mark.parametrize("cls", ["asset", "liability", "equity", "revenue", "expense"])
+    def test_valid_account_class_accepted(self, cls: str):
+        acct = AccountCreate(**{**self._BASE, "account_class": cls})
+        assert acct.account_class == cls
+
+    def test_none_account_class_accepted(self):
+        acct = AccountCreate(**self._BASE)
+        assert acct.account_class is None
+
+    def test_invalid_account_class_rejected(self):
+        with pytest.raises(ValidationError):
+            AccountCreate(**{**self._BASE, "account_class": "invalid"})
+
+    def test_update_valid_account_class(self):
+        update = AccountUpdate(account_class="liability")
+        assert update.account_class == "liability"
+
+    def test_update_invalid_account_class_rejected(self):
+        with pytest.raises(ValidationError):
+            AccountUpdate(account_class="bad_value")
