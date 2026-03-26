@@ -102,6 +102,7 @@ async def confirm_journal_entry(
     entry.confirmed_at = datetime.now()
     entry.confirmed_by = confirmed_by
     await db.flush()
+    await db.refresh(entry)
     return entry
 
 

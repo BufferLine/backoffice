@@ -116,6 +116,7 @@ async def update_loan(
     for key, value in update_dict.items():
         setattr(loan, key, value)
     await db.flush()
+    await db.refresh(loan)
     return loan
 
 
