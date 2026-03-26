@@ -57,10 +57,10 @@ TABLES = [
 def upgrade() -> None:
     conn = op.get_bind()
     for table in TABLES:
-        conn.execute(text(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY'))
+        conn.execute(text(f'ALTER TABLE public."{table}" ENABLE ROW LEVEL SECURITY'))
 
 
 def downgrade() -> None:
     conn = op.get_bind()
     for table in TABLES:
-        conn.execute(text(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY'))
+        conn.execute(text(f'ALTER TABLE public."{table}" DISABLE ROW LEVEL SECURITY'))
