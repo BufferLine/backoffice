@@ -11,7 +11,11 @@ from acct.api_client import api_post
 from acct.config import save_credentials
 from acct.formatters import print_success
 
-app = typer.Typer(name="acct", help="Backoffice Operations CLI")
+app = typer.Typer(
+    name="acct",
+    help="Backoffice Operations CLI\n\n"
+    "AI agents: run 'acct guide' first to understand the system and build your own memory/rules.",
+)
 
 app.add_typer(client.app, name="client")
 app.add_typer(auth.app, name="auth")
@@ -35,6 +39,76 @@ app.add_typer(integration.app, name="integration")
 app.add_typer(loan.app, name="loan")
 app.add_typer(journal.app, name="journal")
 app.add_typer(report.app, name="report")
+
+
+AGENT_GUIDE = """
+=== BACKOFFICE AGENT GUIDE ===
+
+You are operating a Singapore-based backoffice system for invoicing, payroll,
+expenses, payments, and double-entry bookkeeping.
+
+## How this system works
+
+1. BANK TRANSACTIONS come in via Airwallex sync or PDF/CSV statement import
+2. Each transaction needs to be RECONCILED — matched to the right accounts
+3. Reconciliation creates a JOURNAL ENTRY (double-entry: debit + credit)
+4. The TRIAL BALANCE shows all accounts are in balance
+
+## Your core workflow
+
+  acct bank tx-list --status unreconciled     # What needs your attention
+  acct account list                            # Available accounts
+  acct bank tx-reconcile TX_ID \\
+    --bank-account ASSET_UUID \\
+    --contra-account EXPENSE_UUID              # Create the journal entry
+  acct report trial-balance                    # Verify everything balances
+
+## How to classify transactions
+
+Look at the description/counterparty of each bank transaction and decide:
+- Is it an expense? Which category? (salary, software, transport, food, etc.)
+- Is it revenue? (invoice payment, interest, etc.)
+- Is it a transfer between accounts? (loan, capital injection, etc.)
+
+## IMPORTANT: Build your own memory
+
+You SHOULD maintain your own notes/memory about this company's accounts:
+- Which account UUIDs map to what (e.g. "Airwallex SGD = uuid:xxx")
+- Recurring counterparties and their categories (e.g. "CLAUDE.AI → software expense")
+- Classification rules you've learned from past decisions
+
+When you encounter a transaction you're unsure about, ASK the user.
+When the user corrects you, REMEMBER that correction for next time.
+
+Over time you should need to ask less and less.
+
+## Key commands by area
+
+  Bookkeeping:  acct journal create|list|confirm|delete
+  Reports:      acct report trial-balance
+  Bank:         acct bank statement-upload|tx-list|tx-reconcile|tx-auto-match
+  Invoicing:    acct invoice create|list|issue|mark-paid
+  Payroll:      acct payroll create|review|finalize|mark-paid
+  Expenses:     acct expense create|list|confirm|reimburse
+  Payments:     acct payment record|list|link
+  Accounts:     acct account create|list|balance
+
+## Double-entry basics
+
+Every journal entry has balanced debit and credit lines:
+- DEPOSIT to bank:   debit asset(bank), credit revenue/liability
+- WITHDRAWAL:        debit expense/asset, credit asset(bank)
+- Asset/Expense accounts: balance = debits - credits (debit-normal)
+- Liability/Equity/Revenue accounts: balance = credits - debits (credit-normal)
+
+Run 'acct <command> --help' for detailed usage of any command.
+"""
+
+
+@app.command()
+def guide() -> None:
+    """Print agent guide — read this first if you're an AI agent operating this system."""
+    typer.echo(AGENT_GUIDE)
 
 
 @app.command()
