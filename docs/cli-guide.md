@@ -16,6 +16,18 @@ acct --help
 
 ---
 
+## General
+
+### `acct guide`
+
+Print agent guide for AI agents.
+
+```bash
+acct guide
+```
+
+---
+
 ## Authentication
 
 ### `acct init`
@@ -537,6 +549,73 @@ acct transaction list [--account ACCOUNT_ID] [--category CAT] [--status STATUS] 
 
 ---
 
+## Journal
+
+### `acct journal create`
+
+Create a new journal entry with debit and credit sides.
+
+```bash
+acct journal create --date YYYY-MM-DD --debit ACCT_ID:AMOUNT --credit ACCT_ID:AMOUNT [--currency CODE] [--description TEXT] [--confirm/--no-confirm]
+```
+
+```bash
+acct journal create \
+  --date 2026-03-20 \
+  --debit acc-expense:1500 \
+  --credit acc-bank:1500 \
+  --currency SGD \
+  --description "Office supplies" \
+  --confirm
+```
+
+### `acct journal list`
+
+```bash
+acct journal list [--page N] [--confirmed/--unconfirmed] [--from YYYY-MM-DD] [--to YYYY-MM-DD]
+```
+
+### `acct journal show`
+
+```bash
+acct journal show ENTRY_ID
+```
+
+### `acct journal confirm`
+
+Confirm a pending journal entry.
+
+```bash
+acct journal confirm ENTRY_ID
+```
+
+### `acct journal delete`
+
+Delete a journal entry.
+
+```bash
+acct journal delete ENTRY_ID
+```
+
+---
+
+## Reports
+
+### `acct report trial-balance`
+
+Generate a trial balance report as of a specific date.
+
+```bash
+acct report trial-balance [--date YYYY-MM-DD] [--include-unconfirmed]
+```
+
+```bash
+acct report trial-balance --date 2026-03-31
+acct report trial-balance --date 2026-03-31 --include-unconfirmed
+```
+
+---
+
 ## Tasks & Todo
 
 ### `acct todo summary`
@@ -763,6 +842,21 @@ Sources: `airwallex`, `generic`.
 
 ```bash
 acct bank tx-list [--status unmatched|matched|ignored]
+```
+
+### `acct bank tx-reconcile`
+
+Reconcile a bank transaction by creating a journal entry automatically (debit/credit based on deposit/withdrawal).
+
+```bash
+acct bank tx-reconcile TX_ID --bank-account ACCOUNT_ID --contra-account ACCOUNT_ID [--description TEXT] [--no-confirm]
+```
+
+```bash
+acct bank tx-reconcile tx-abc123 \
+  --bank-account acc-bank-dbs \
+  --contra-account acc-expense \
+  --description "Office supplies reimbursement"
 ```
 
 ---

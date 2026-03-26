@@ -30,13 +30,13 @@ See [docs/testing.md](docs/testing.md) for test tiers, writing guide, and pre-PR
 ```
 backend/app/              # Python FastAPI + SQLAlchemy
   api/                    # REST endpoints (~146 endpoints)
-  models/                 # SQLAlchemy models (35 tables)
+  models/                 # SQLAlchemy models (37 tables)
   schemas/                # Pydantic request/response schemas
   services/               # Business logic
   state_machines/         # Invoice, payroll, expense state transitions
   jurisdiction/           # SG tax/deduction rules (modular)
   integrations/           # Provider framework (Airwallex, etc.)
-  statement_parsers/      # Bank statement CSV parsers
+  statement_parsers/      # Bank statement parsers (CSV + DBS PDF)
   export_formatters/      # Pluggable export formats (generic CSV, extensible)
   templates/              # Invoice/payslip/loan PDF templates (Jinja2)
 cli/acct/                 # Python Typer CLI (`acct` command)
@@ -46,12 +46,14 @@ scripts/                  # Dev/test/deploy scripts
 
 ## Key Design Decisions
 
-- **CLI-first**: all operations available via `acct` CLI
-- **Domain-based RBAC**: permissions like `invoice:write`, `payroll:finalize`
+- **CLI-first**: all operations available via `acct` CLI; AI agents run `acct guide` first
+- **Double-entry bookkeeping**: JournalEntry + JournalLine with debit/credit balance constraint
+- **Domain-based RBAC**: permissions like `invoice:write`, `payroll:finalize`, `journal:write`
 - **State machines**: invoice (draft→issued→paid/cancelled), payroll (draft→reviewed→finalized→paid), expense (draft→confirmed→reimbursed)
 - **Jurisdiction module**: Singapore SDL/CPF/GST calculations, extensible
 - **Evidence-first**: every financial action produces proof (PDF, receipt, tx hash)
 - **Loan module**: director/shareholder loan ledger with agreement/statement/discharge PDF lifecycle
+- **Account classification**: asset/liability/equity/revenue/expense with debit-normal/credit-normal balance
 
 ## Git Workflow
 

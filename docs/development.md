@@ -144,8 +144,8 @@ Copy `.env.example` to `.env`. Key variables:
 ```
 backend/
   app/
-    api/                  # REST endpoints (~146 endpoints, RBAC enforced)
-    models/               # SQLAlchemy models (35 tables)
+    api/                  # REST endpoints (~152 endpoints, RBAC enforced)
+    models/               # SQLAlchemy models (37 tables)
     schemas/              # Pydantic request/response schemas
     services/             # Business logic
     state_machines/       # Invoice, payroll, expense state transitions

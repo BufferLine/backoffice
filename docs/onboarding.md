@@ -7,6 +7,8 @@ First-time setup guide for Backoffice. Follow these steps after the server is ru
 - Server is running (see [Server Setup](server-setup.md) for production, or [Development](development.md) for local)
 - `acct` CLI installed: `pip install "git+https://github.com/YOUR_ORG/backoffice.git#subdirectory=cli"`
 
+**Note for AI agents**: Run `acct guide` to get conversational help through the setup process.
+
 ---
 
 ## Step 1: Initialize the System
@@ -74,6 +76,26 @@ Verify:
 ```bash
 acct whoami
 ```
+
+---
+
+## Step 3b: Create Chart of Accounts (Optional)
+
+Before processing transactions, optionally set up your chart of accounts:
+
+```bash
+acct account create \
+  --name "DBS Operating" \
+  --account-class asset \
+  --currency SGD
+
+acct account create \
+  --name "Business Expenses" \
+  --account-class expense \
+  --currency SGD
+```
+
+Account classes: `asset`, `liability`, `equity`, `revenue`, `expense`.
 
 ---
 
