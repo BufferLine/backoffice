@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,8 +36,10 @@ async def generate_reference_number(
 ) -> str:
     """Generate a unique reference number like BL-PS-2026-0001.
 
-    Uses SELECT ... FOR UPDATE to prevent race conditions when
-    multiple concurrent requests generate reference numbers.
+    Concurrent safety is provided by the partial unique index on
+    payments.reference_number — duplicates are caught at flush time
+    and the caller (record_payment / create_payment_from_entity)
+    surfaces the IntegrityError.
     """
     code = _ENTITY_PREFIX_MAP.get(entity_type, "PAY")
     year = datetime.now(timezone.utc).year
@@ -46,7 +48,6 @@ async def generate_reference_number(
     result = await db.execute(
         select(func.max(Payment.reference_number))
         .where(Payment.reference_number.like(f"{prefix}%"))
-        .with_for_update()
     )
     max_ref = result.scalar_one_or_none()
     if max_ref is None:
