@@ -50,6 +50,8 @@ async def payment_pipeline(
         detail = str(e)
         if "not found" in detail.lower():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        if "unsupported" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
     return PaymentPipelineResponse(

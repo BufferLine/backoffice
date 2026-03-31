@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -61,7 +61,7 @@ class PaymentLinkRequest(BaseModel):
 
 class PaymentPipelineRequest(BaseModel):
     """Request to create a payment from an entity with auto-proof and bank matching."""
-    entity_type: Literal["payroll_run", "invoice", "loan"]
+    entity_type: str
     entity_id: UUID
     payment_type: str = "bank_transfer"
 
