@@ -1,3 +1,4 @@
+import mimetypes
 from pathlib import Path
 from typing import Optional
 
@@ -118,8 +119,11 @@ def attach(
     filepath: Path = typer.Argument(..., help="File path to attach", exists=True),
 ) -> None:
     """Attach a proof/evidence file to a payment."""
+    mime_type, _ = mimetypes.guess_type(str(filepath))
+    if not mime_type:
+        mime_type = "application/octet-stream"
     with open(filepath, "rb") as f:
-        files = {"file": (filepath.name, f, "application/octet-stream")}
+        files = {"file": (filepath.name, f, mime_type)}
         data = api_post(f"/api/payments/{payment_id}/attach-proof", files=files)
     print_success(f"Proof attached to payment {payment_id}")
     print_json(data)
