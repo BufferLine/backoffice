@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -20,6 +20,12 @@ class Payment(Base):
             unique=True,
             postgresql_where="tx_hash IS NOT NULL",
         ),
+        Index(
+            "uq_payments_reference_number_not_null",
+            "reference_number",
+            unique=True,
+            postgresql_where=text("reference_number IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -37,6 +43,7 @@ class Payment(Base):
     sgd_value: Mapped[float | None] = mapped_column(Numeric(19, 6), nullable=True)
     tx_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     chain_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reference_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     bank_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     proof_file_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True

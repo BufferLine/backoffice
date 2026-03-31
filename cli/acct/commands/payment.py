@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -78,6 +79,49 @@ def show(
 ) -> None:
     """Show payment details."""
     data = api_get(f"/api/payments/{payment_id}")
+    print_json(data)
+
+
+@app.command()
+def pipeline(
+    entity: str = typer.Option(
+        ..., "--entity", help="Entity reference, e.g. payroll_run:<id> or invoice:<id> or loan:<id>"
+    ),
+    type: str = typer.Option("bank_transfer", "--type", help="Payment type: bank_transfer|crypto|cash"),
+) -> None:
+    """Auto-create payment from entity with proof attachment and bank matching."""
+    entity_type, _, entity_id = entity.partition(":")
+    payload: dict = {
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "payment_type": type,
+    }
+    data = api_post("/api/payments/pipeline", json_data=payload)
+    payment = data.get("payment", {})
+    print_success(f"Payment created: {payment.get('id', '')}")
+    print_success(f"Reference: {payment.get('reference_number', 'N/A')}")
+    if payment.get("proof_file_id"):
+        print_success("Proof document auto-attached")
+    if data.get("bank_match_tx_id"):
+        print_success(
+            f"Bank transaction matched: {data['bank_match_tx_id']} "
+            f"(confidence: {data.get('bank_match_confidence', 'N/A')})"
+        )
+    else:
+        typer.echo("No bank transaction match found (will retry on next statement import)")
+    print_json(data)
+
+
+@app.command()
+def attach(
+    payment_id: str = typer.Argument(..., help="Payment ID"),
+    filepath: Path = typer.Argument(..., help="File path to attach", exists=True),
+) -> None:
+    """Attach a proof/evidence file to a payment."""
+    with open(filepath, "rb") as f:
+        files = {"file": (filepath.name, f, "application/octet-stream")}
+        data = api_post(f"/api/payments/{payment_id}/attach-proof", files=files)
+    print_success(f"Proof attached to payment {payment_id}")
     print_json(data)
 
 
