@@ -101,21 +101,22 @@ def _compute_match_confidence(
     confidence = 0.5  # Base for amount + currency match (already filtered)
 
     # Reference number match (system-generated, highly reliable)
+    ref_number_matched = False
     if payment.reference_number and tx.reference:
         ref_tx = tx.reference.lower().strip()
         ref_pay = payment.reference_number.lower().strip()
-        if ref_tx == ref_pay or ref_tx in ref_pay or ref_pay in ref_tx:
+        # Exact match or tx.reference contains the full reference number as a
+        # discrete token (bank statements often prepend/append text around it)
+        if ref_tx == ref_pay or ref_pay in ref_tx:
             confidence += 0.3
+            ref_number_matched = True
 
     # Bank reference match
-    if tx.reference and payment.bank_reference:
+    if tx.reference and payment.bank_reference and not ref_number_matched:
         bank_ref_tx = tx.reference.lower()
         bank_ref_pay = payment.bank_reference.lower()
         if bank_ref_tx in bank_ref_pay or bank_ref_pay in bank_ref_tx:
-            # Avoid double-counting if reference_number already matched
-            if not (payment.reference_number and tx.reference
-                    and payment.reference_number.lower() in tx.reference.lower()):
-                confidence += 0.1
+            confidence += 0.1
 
     # Counterparty match
     if tx.counterparty and payment.notes:

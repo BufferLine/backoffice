@@ -252,3 +252,11 @@ class TestComputeMatchConfidence:
         payment = _make_payment(payment_date=None)
         confidence = _compute_match_confidence(tx, payment)
         assert confidence == pytest.approx(0.5)
+
+    def test_reference_number_substring_false_positive_rejected(self):
+        """BL-PS-2026-1 should NOT match BL-PS-2026-10 via substring."""
+        tx = _make_tx(reference="BL-PS-2026-1")
+        payment = _make_payment(reference_number="BL-PS-2026-10")
+        confidence = _compute_match_confidence(tx, payment)
+        # reference_number is NOT a substring of tx.reference, so no +0.3 boost
+        assert confidence < 0.8

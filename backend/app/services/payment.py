@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,15 +34,19 @@ async def generate_reference_number(
     db: AsyncSession,
     entity_type: str,
 ) -> str:
-    """Generate a unique reference number like BL-PS-2026-0001."""
+    """Generate a unique reference number like BL-PS-2026-0001.
+
+    Uses SELECT ... FOR UPDATE to prevent race conditions when
+    multiple concurrent requests generate reference numbers.
+    """
     code = _ENTITY_PREFIX_MAP.get(entity_type, "PAY")
     year = datetime.now(timezone.utc).year
     prefix = f"BL-{code}-{year}-"
 
     result = await db.execute(
-        select(func.max(Payment.reference_number)).where(
-            Payment.reference_number.like(f"{prefix}%")
-        )
+        select(func.max(Payment.reference_number))
+        .where(Payment.reference_number.like(f"{prefix}%"))
+        .with_for_update()
     )
     max_ref = result.scalar_one_or_none()
     if max_ref is None:
@@ -178,15 +182,20 @@ async def attach_proof(
     if file_record is None:
         raise ValueError(f"File {file_id} not found")
 
+    previous_file_id = payment.proof_file_id
     payment.proof_file_id = file_id
     await db.flush()
+
+    audit_data: dict = {"file_id": str(file_id)}
+    if previous_file_id is not None:
+        audit_data["previous_file_id"] = str(previous_file_id)
 
     await AuditService(db).log(
         action="payment.attach_proof",
         entity_type="payment",
         entity_id=payment.id,
         actor_id=actor_id,
-        input_data={"file_id": str(file_id)},
+        input_data=audit_data,
     )
     return payment
 
@@ -369,7 +378,7 @@ async def create_payment_from_entity(
         payment_type=payment_type,
         related_entity_type=entity_type,
         related_entity_id=entity_id,
-        payment_date=date.today(),
+        payment_date=datetime.now(timezone.utc).date(),
         currency=details["currency"],
         amount=details["amount"],
         reference_number=reference_number,
