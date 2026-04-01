@@ -22,7 +22,7 @@ from app.api import settings as settings_router
 from app.api import accounts, transactions, recurring_commitments
 from app.api import payment_methods
 from app.api import integrations as integrations_router
-from app.api import journal
+from app.api import journal, fx_conversion
 from app.api.payroll import employees_router
 from app.database import AsyncSessionLocal
 from app.services.auth import seed_permissions, seed_roles
@@ -151,6 +151,7 @@ app.include_router(payment_methods.router, prefix="/api/payment-methods", tags=[
 app.include_router(integrations_router.router, prefix="/api", tags=["integrations"])
 app.include_router(loans.router, prefix="/api/loans", tags=["loans"])
 app.include_router(journal.router, prefix="/api/journal-entries", tags=["journal"])
+app.include_router(fx_conversion.router, prefix="/api/fx-conversions", tags=["fx-conversion"])
 
 
 @app.get("/health")
