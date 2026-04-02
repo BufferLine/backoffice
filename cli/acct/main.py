@@ -6,7 +6,7 @@ from acct.commands import auth, automation, bank, changelog, client, employee, e
 from acct.commands import account, transaction, commitment
 from acct.commands import payment_method
 from acct.commands import integration, loan
-from acct.commands import journal, report
+from acct.commands import journal, report, fx
 from acct.api_client import api_post
 from acct.config import save_credentials
 from acct.formatters import print_success
@@ -39,6 +39,7 @@ app.add_typer(integration.app, name="integration")
 app.add_typer(loan.app, name="loan")
 app.add_typer(journal.app, name="journal")
 app.add_typer(report.app, name="report")
+app.add_typer(fx.app, name="fx")
 
 
 AGENT_GUIDE = """
@@ -91,6 +92,7 @@ Over time you should need to ask less and less.
   Payroll:      acct payroll create|review|finalize|mark-paid
   Expenses:     acct expense create|list|confirm|reimburse
   Payments:     acct payment record|list|link
+  FX:           acct fx record|list|show
   Accounts:     acct account create|list|balance
 
 ## Double-entry basics

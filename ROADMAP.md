@@ -152,6 +152,9 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [x] API: /api/journal-entries, /api/journal-entries/trial-balance, reconcile endpoint
 - [x] CLI: acct journal, acct report trial-balance, acct bank tx-reconcile
 - [x] Fix float → Decimal in payment SGD calculation
+- [x] FX conversion recording with auto journal entry (acct fx record|list|show)
+- [x] Payment pipeline automation (acct payment pipeline — finalize → payment → proof → bank match)
+- [ ] Airwallex FX conversion auto-sync (pull conversion history → auto-create fx records)
 - [ ] Agent-assisted categorization (auto-classify bank transactions)
 - [ ] Income statement (P&L) report
 - [ ] Balance sheet report

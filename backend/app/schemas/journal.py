@@ -33,12 +33,34 @@ class JournalEntryCreate(BaseModel):
     def check_balanced(self):
         if len(self.lines) < 2:
             raise ValueError("Journal entry must have at least 2 lines")
-        total_debit = sum(line.debit for line in self.lines)
-        total_credit = sum(line.credit for line in self.lines)
-        if total_debit != total_credit:
-            raise ValueError(
-                f"Journal entry must balance: total debit ({total_debit}) != total credit ({total_credit})"
-            )
+
+        currencies = {line.currency for line in self.lines}
+
+        if len(currencies) == 1:
+            # Single-currency: nominal balance check
+            total_debit = sum(line.debit for line in self.lines)
+            total_credit = sum(line.credit for line in self.lines)
+            if total_debit != total_credit:
+                raise ValueError(
+                    f"Journal entry must balance: total debit ({total_debit}) != total credit ({total_credit})"
+                )
+        else:
+            # Multi-currency: balance in SGD equivalent via fx_rate_to_sgd
+            for line in self.lines:
+                if line.fx_rate_to_sgd is None:
+                    raise ValueError(
+                        f"Multi-currency journal entry requires fx_rate_to_sgd on every line "
+                        f"(missing for {line.currency} line)"
+                    )
+            total_debit_sgd = sum(line.debit * line.fx_rate_to_sgd for line in self.lines)
+            total_credit_sgd = sum(line.credit * line.fx_rate_to_sgd for line in self.lines)
+            # Allow small rounding tolerance for FX conversions
+            diff = abs(total_debit_sgd - total_credit_sgd)
+            if diff > Decimal("0.01"):
+                raise ValueError(
+                    f"Multi-currency journal entry must balance in SGD: "
+                    f"total debit SGD ({total_debit_sgd}) != total credit SGD ({total_credit_sgd})"
+                )
         return self
 
 
