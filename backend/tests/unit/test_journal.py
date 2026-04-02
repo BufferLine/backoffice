@@ -135,19 +135,20 @@ class TestJournalEntryCreate:
         assert entry.is_confirmed is False
 
     def test_multi_currency_balanced(self):
-        """Multi-currency lines still need debit == credit in total."""
+        """Multi-currency lines must balance in SGD equivalent via fx_rate_to_sgd."""
         a1, a2 = uuid4(), uuid4()
-        # Same amounts even if different currencies — balance check is numeric
+        # SGD 1350 sell → USD 1000 buy @ 1.35 SGD/USD
+        # Debit: USD 1000 * 1.35 = SGD 1350, Credit: SGD 1350 * 1.0 = SGD 1350
         entry = JournalEntryCreate(
             entry_date=date(2026, 3, 26),
             lines=[
                 JournalLineCreate(
                     account_id=a1, debit=Decimal("1000"), credit=Decimal("0"),
-                    currency="SGD", fx_rate_to_sgd=Decimal("1"),
+                    currency="USD", fx_rate_to_sgd=Decimal("1.35"),
                 ),
                 JournalLineCreate(
-                    account_id=a2, debit=Decimal("0"), credit=Decimal("1000"),
-                    currency="USD", fx_rate_to_sgd=Decimal("1.35"),
+                    account_id=a2, debit=Decimal("0"), credit=Decimal("1350"),
+                    currency="SGD", fx_rate_to_sgd=Decimal("1"),
                 ),
             ],
         )

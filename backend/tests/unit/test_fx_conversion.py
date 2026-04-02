@@ -1,4 +1,4 @@
-"""Unit tests for FX conversion: schema validation, FX rate computation."""
+"""Unit tests for FX conversion: schema validation, FX rate computation, journal balancing."""
 
 from decimal import Decimal
 
@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.fx_conversion import FxConversionCreate
+from app.schemas.journal import JournalEntryCreate, JournalLineCreate
 
 
 class TestFxConversionCreate:
@@ -53,10 +54,13 @@ class TestFxConversionCreate:
         with pytest.raises(ValidationError):
             FxConversionCreate(**payload)
 
-    def test_negative_amount_allowed(self):
-        """Negative amounts are valid — schema doesn't restrict sign."""
-        data = FxConversionCreate(**self._valid_payload(sell_amount=Decimal("-100")))
-        assert data.sell_amount == Decimal("-100")
+    def test_zero_amount_raises(self):
+        with pytest.raises(ValidationError, match="greater than zero"):
+            FxConversionCreate(**self._valid_payload(buy_amount=Decimal("0")))
+
+    def test_negative_amount_raises(self):
+        with pytest.raises(ValidationError, match="greater than zero"):
+            FxConversionCreate(**self._valid_payload(sell_amount=Decimal("-100")))
 
 
 class TestFxRateComputation:
@@ -74,50 +78,92 @@ class TestFxRateComputation:
         rate = sell / buy
         assert rate == Decimal("0.7")
 
-    def test_sgd_amount_when_sell_is_sgd(self):
-        """When selling SGD, sgd_amount = sell_amount."""
-        sell_currency = "SGD"
-        sell_amount = Decimal("100000")
-        buy_currency = "USD"
-        buy_amount = Decimal("70000")
 
-        if sell_currency == "SGD":
-            sgd_amount = sell_amount
-        elif buy_currency == "SGD":
-            sgd_amount = buy_amount
-        else:
-            sgd_amount = sell_amount
+class TestMultiCurrencyJournalBalance:
+    """Test that multi-currency journal entries balance in SGD equivalent."""
 
-        assert sgd_amount == Decimal("100000")
+    def test_fx_journal_entry_balances_in_sgd(self):
+        """SGD 100,000 → USD 70,000: debit USD 70k * 1.4286 ≈ credit SGD 100k * 1.0."""
+        sgd_account = "00000000-0000-0000-0000-000000000001"
+        usd_account = "00000000-0000-0000-0000-000000000002"
+        fx_rate = Decimal("100000") / Decimal("70000")  # ~1.428571
 
-    def test_sgd_amount_when_buy_is_sgd(self):
-        """When buying SGD, sgd_amount = buy_amount."""
-        sell_currency = "USD"
-        sell_amount = Decimal("70000")
-        buy_currency = "SGD"
-        buy_amount = Decimal("100000")
+        entry = JournalEntryCreate(
+            entry_date="2026-04-01",
+            description="FX conversion test",
+            source_type="fx_conversion",
+            is_confirmed=True,
+            lines=[
+                JournalLineCreate(
+                    account_id=usd_account,
+                    debit=Decimal("70000"),
+                    credit=Decimal("0"),
+                    currency="USD",
+                    fx_rate_to_sgd=fx_rate,
+                ),
+                JournalLineCreate(
+                    account_id=sgd_account,
+                    debit=Decimal("0"),
+                    credit=Decimal("100000"),
+                    currency="SGD",
+                    fx_rate_to_sgd=Decimal("1"),
+                ),
+            ],
+        )
+        assert len(entry.lines) == 2
 
-        if sell_currency == "SGD":
-            sgd_amount = sell_amount
-        elif buy_currency == "SGD":
-            sgd_amount = buy_amount
-        else:
-            sgd_amount = sell_amount
+    def test_single_currency_still_checks_nominal(self):
+        """Single-currency entries must still balance nominally."""
+        account_a = "00000000-0000-0000-0000-000000000001"
+        account_b = "00000000-0000-0000-0000-000000000002"
 
-        assert sgd_amount == Decimal("100000")
+        with pytest.raises(ValidationError, match="must balance"):
+            JournalEntryCreate(
+                entry_date="2026-04-01",
+                lines=[
+                    JournalLineCreate(
+                        account_id=account_a, debit=Decimal("1000"), credit=Decimal("0"), currency="SGD",
+                    ),
+                    JournalLineCreate(
+                        account_id=account_b, debit=Decimal("0"), credit=Decimal("500"), currency="SGD",
+                    ),
+                ],
+            )
 
-    def test_sgd_amount_neither_sgd_uses_sell(self):
-        """When neither side is SGD, sgd_amount falls back to sell_amount."""
-        sell_currency = "USD"
-        sell_amount = Decimal("70000")
-        buy_currency = "EUR"
-        buy_amount = Decimal("65000")
+    def test_multi_currency_without_fx_rate_raises(self):
+        """Multi-currency entries without fx_rate_to_sgd should be rejected."""
+        account_a = "00000000-0000-0000-0000-000000000001"
+        account_b = "00000000-0000-0000-0000-000000000002"
 
-        if sell_currency == "SGD":
-            sgd_amount = sell_amount
-        elif buy_currency == "SGD":
-            sgd_amount = buy_amount
-        else:
-            sgd_amount = sell_amount
+        with pytest.raises(ValidationError, match="fx_rate_to_sgd"):
+            JournalEntryCreate(
+                entry_date="2026-04-01",
+                lines=[
+                    JournalLineCreate(
+                        account_id=account_a, debit=Decimal("70000"), credit=Decimal("0"), currency="USD",
+                    ),
+                    JournalLineCreate(
+                        account_id=account_b, debit=Decimal("0"), credit=Decimal("100000"), currency="SGD",
+                    ),
+                ],
+            )
 
-        assert sgd_amount == Decimal("70000")
+    def test_multi_currency_unbalanced_in_sgd_raises(self):
+        """Multi-currency entries that don't balance in SGD should be rejected."""
+        account_a = "00000000-0000-0000-0000-000000000001"
+        account_b = "00000000-0000-0000-0000-000000000002"
+
+        with pytest.raises(ValidationError, match="must balance in SGD"):
+            JournalEntryCreate(
+                entry_date="2026-04-01",
+                lines=[
+                    JournalLineCreate(
+                        account_id=account_a, debit=Decimal("70000"), credit=Decimal("0"),
+                        currency="USD", fx_rate_to_sgd=Decimal("1.5"),  # 105,000 SGD
+                    ),
+                    JournalLineCreate(
+                        account_id=account_b, debit=Decimal("0"), credit=Decimal("100000"),
+                        currency="SGD", fx_rate_to_sgd=Decimal("1"),  # 100,000 SGD
+                    ),
+                ],
+            )

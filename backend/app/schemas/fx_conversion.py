@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class FxConversionCreate(BaseModel):
@@ -17,6 +17,13 @@ class FxConversionCreate(BaseModel):
     provider: Optional[str] = None
     reference: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator("sell_amount", "buy_amount")
+    @classmethod
+    def amounts_must_be_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Amount must be greater than zero")
+        return v
 
     @model_validator(mode="after")
     def check_different_currencies(self):

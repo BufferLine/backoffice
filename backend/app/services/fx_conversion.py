@@ -43,31 +43,26 @@ async def record_fx_conversion(
             f"does not match buy_currency ({data.buy_currency})"
         )
 
+    # Require at least one side to be SGD (functional currency)
+    if data.sell_currency != "SGD" and data.buy_currency != "SGD":
+        raise ValueError(
+            "At least one side of the FX conversion must be SGD (functional currency). "
+            "For non-SGD pairs, record two separate conversions via SGD."
+        )
+
     # Compute FX rate: how much sell_currency per 1 buy_currency
     fx_rate = Decimal(str(data.sell_amount)) / Decimal(str(data.buy_amount))
-
-    # Determine SGD amount for balanced journal entry
-    if data.sell_currency == "SGD":
-        sgd_amount = data.sell_amount
-    elif data.buy_currency == "SGD":
-        sgd_amount = data.buy_amount
-    else:
-        # Neither side is SGD — use sell_amount as proxy
-        # (user should provide SGD-equivalent or handle via separate revaluation)
-        sgd_amount = data.sell_amount
 
     # Determine fx_rate_to_sgd for each line
     if data.sell_currency == "SGD":
         sell_fx_rate = Decimal("1")
         buy_fx_rate = fx_rate  # SGD per 1 buy_currency
-    elif data.buy_currency == "SGD":
+    else:
         buy_fx_rate = Decimal("1")
         sell_fx_rate = Decimal("1") / fx_rate  # SGD per 1 sell_currency
-    else:
-        sell_fx_rate = None
-        buy_fx_rate = None
 
-    # Create journal entry (both sides in SGD equivalent for balance)
+    # Create journal entry with native currency amounts on each line.
+    # Balance is validated in SGD equivalent via fx_rate_to_sgd.
     journal_data = JournalEntryCreate(
         entry_date=data.conversion_date,
         description=(
@@ -79,7 +74,7 @@ async def record_fx_conversion(
         lines=[
             JournalLineCreate(
                 account_id=data.buy_account_id,
-                debit=sgd_amount,
+                debit=data.buy_amount,
                 credit=Decimal("0"),
                 currency=data.buy_currency,
                 fx_rate_to_sgd=buy_fx_rate,
@@ -88,7 +83,7 @@ async def record_fx_conversion(
             JournalLineCreate(
                 account_id=data.sell_account_id,
                 debit=Decimal("0"),
-                credit=sgd_amount,
+                credit=data.sell_amount,
                 currency=data.sell_currency,
                 fx_rate_to_sgd=sell_fx_rate,
                 description=f"FX sell {data.sell_currency} {data.sell_amount:,.2f}",
