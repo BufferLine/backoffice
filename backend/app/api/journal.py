@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_permission
+from app.api.deps import AuthenticatedUser, get_current_user, require_permission
 from app.database import get_db
 from app.schemas.journal import (
     JournalEntryCreate,
@@ -22,9 +22,9 @@ router = APIRouter()
 async def create_journal_entry(
     data: JournalEntryCreate,
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(require_permission("journal:write")),
+    user: AuthenticatedUser = Depends(require_permission("journal:write")),
 ):
-    entry = await journal_svc.create_journal_entry(db, data, created_by=user["user_id"])
+    entry = await journal_svc.create_journal_entry(db, data, created_by=user.id)
     return entry
 
 
@@ -71,10 +71,10 @@ async def get_journal_entry(
 async def confirm_journal_entry(
     entry_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(require_permission("journal:write")),
+    user: AuthenticatedUser = Depends(require_permission("journal:write")),
 ):
     try:
-        return await journal_svc.confirm_journal_entry(db, entry_id, confirmed_by=user["user_id"])
+        return await journal_svc.confirm_journal_entry(db, entry_id, confirmed_by=user.id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Journal entry not found")
 
