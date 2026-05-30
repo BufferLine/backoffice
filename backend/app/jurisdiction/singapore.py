@@ -7,17 +7,27 @@ class SingaporeJurisdiction(JurisdictionBase):
     """Singapore payroll and tax rules."""
 
     SDL_RATE = Decimal("0.0025")  # 0.25%
-    SDL_CAP_LOW = Decimal("11.25")  # Cap for salary <= $4,500
-    SDL_THRESHOLD = Decimal("4500")
+    SDL_MIN_LEVY = Decimal("2.00")  # Floor: SGD 2/month per employee
+    SDL_MAX_LEVY = Decimal("11.25")  # Cap: SGD 11.25/month per employee
+    SDL_MIN_WAGE = Decimal("800")  # Below this wage, SDL = MIN_LEVY flat
+    SDL_MAX_WAGE = Decimal("4500")  # Above this wage, SDL = MAX_LEVY flat
 
     def calculate_deductions(self, gross_salary: Decimal, work_pass_type: str, **kwargs) -> list[Deduction]:
         deductions = []
 
-        # SDL applies to all employees
-        sdl_amount = gross_salary * self.SDL_RATE
-        if gross_salary <= self.SDL_THRESHOLD:
-            sdl_amount = min(sdl_amount, self.SDL_CAP_LOW)
-        sdl_amount = sdl_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        # Singapore SDL (SSG/IRAS rule):
+        # - wage <= 0:            SDL = 0
+        # - 0 < wage < 800:       SDL = 2.00 (flat minimum)
+        # - 800 <= wage <= 4500:  SDL = wage × 0.25%
+        # - wage > 4500:          SDL = 11.25 (flat maximum)
+        if gross_salary <= 0:
+            sdl_amount = Decimal("0.00")
+        elif gross_salary < self.SDL_MIN_WAGE:
+            sdl_amount = self.SDL_MIN_LEVY
+        elif gross_salary > self.SDL_MAX_WAGE:
+            sdl_amount = self.SDL_MAX_LEVY
+        else:
+            sdl_amount = (gross_salary * self.SDL_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         deductions.append(
             Deduction(
@@ -25,7 +35,7 @@ class SingaporeJurisdiction(JurisdictionBase):
                 description="Skills Development Levy",
                 amount=sdl_amount,
                 rate=self.SDL_RATE,
-                cap_amount=self.SDL_CAP_LOW if gross_salary <= self.SDL_THRESHOLD else None,
+                cap_amount=self.SDL_MAX_LEVY,
                 metadata={"jurisdiction": "SG", "employer_cost": True},
             )
         )

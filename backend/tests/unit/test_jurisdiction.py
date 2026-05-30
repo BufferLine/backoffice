@@ -29,7 +29,7 @@ class TestGetJurisdiction:
 
 
 class TestSdlCalculation:
-    """SDL rate is 0.25%, capped at $11.25 for salary <= $4,500."""
+    """SDL: 0.25% of wage, floor SGD 2 (wage < 800), cap SGD 11.25 (wage > 4,500)."""
 
     def setup_method(self):
         self.jur = SingaporeJurisdiction()
@@ -37,41 +37,58 @@ class TestSdlCalculation:
     def _get_sdl(self, deductions):
         return next(d for d in deductions if d.deduction_type == "sdl")
 
-    def test_sdl_below_threshold_under_cap(self):
-        # $1000 * 0.0025 = $2.50, well under $11.25 cap
+    def test_sdl_in_linear_band_under_cap(self):
+        # $1000 * 0.0025 = $2.50, within the linear band
         deductions = self.jur.calculate_deductions(Decimal("1000"), "ep")
         sdl = self._get_sdl(deductions)
         assert sdl.amount == Decimal("2.50")
 
-    def test_sdl_at_threshold_hits_cap(self):
-        # $4500 * 0.0025 = $11.25 exactly at cap
+    def test_sdl_at_max_wage_hits_cap(self):
+        # $4500 * 0.0025 = $11.25 — top of the linear band, equal to cap
         deductions = self.jur.calculate_deductions(Decimal("4500"), "ep")
         sdl = self._get_sdl(deductions)
         assert sdl.amount == Decimal("11.25")
 
-    def test_sdl_just_below_threshold_capped(self):
-        # $4000 * 0.0025 = $10.00, under cap — no clamp needed
+    def test_sdl_just_below_max_wage(self):
+        # $4000 * 0.0025 = $10.00, still in linear band
         deductions = self.jur.calculate_deductions(Decimal("4000"), "ep")
         sdl = self._get_sdl(deductions)
         assert sdl.amount == Decimal("10.00")
 
-    def test_sdl_above_threshold_no_cap(self):
-        # $5000 * 0.0025 = $12.50, above threshold so no cap applies
+    def test_sdl_above_max_wage_clamped_to_cap(self):
+        # $5000 > $4,500 → flat $11.25
         deductions = self.jur.calculate_deductions(Decimal("5000"), "ep")
         sdl = self._get_sdl(deductions)
-        assert sdl.amount == Decimal("12.50")
+        assert sdl.amount == Decimal("11.25")
 
-    def test_sdl_well_above_threshold(self):
-        # $10000 * 0.0025 = $25.00
+    def test_sdl_high_salary_still_capped(self):
+        # $10000 → flat $11.25 (NOT $25.00)
         deductions = self.jur.calculate_deductions(Decimal("10000"), "ep")
         sdl = self._get_sdl(deductions)
-        assert sdl.amount == Decimal("25.00")
+        assert sdl.amount == Decimal("11.25")
 
-    def test_sdl_very_high_salary(self):
-        # $100000 * 0.0025 = $250.00
+    def test_sdl_very_high_salary_still_capped(self):
+        # $100000 → flat $11.25 (NOT $250.00)
         deductions = self.jur.calculate_deductions(Decimal("100000"), "ep")
         sdl = self._get_sdl(deductions)
-        assert sdl.amount == Decimal("250.00")
+        assert sdl.amount == Decimal("11.25")
+
+    def test_sdl_below_min_wage_gets_floor(self):
+        # $500 < $800 → flat $2.00 floor (NOT $1.25 = 500*0.0025)
+        deductions = self.jur.calculate_deductions(Decimal("500"), "ep")
+        sdl = self._get_sdl(deductions)
+        assert sdl.amount == Decimal("2.00")
+
+    def test_sdl_at_min_wage_uses_linear(self):
+        # $800 * 0.0025 = $2.00 — bottom of linear band
+        deductions = self.jur.calculate_deductions(Decimal("800"), "ep")
+        sdl = self._get_sdl(deductions)
+        assert sdl.amount == Decimal("2.00")
+
+    def test_sdl_zero_salary(self):
+        deductions = self.jur.calculate_deductions(Decimal("0"), "ep")
+        sdl = self._get_sdl(deductions)
+        assert sdl.amount == Decimal("0.00")
 
     def test_sdl_deduction_type(self):
         deductions = self.jur.calculate_deductions(Decimal("3000"), "ep")
@@ -88,15 +105,12 @@ class TestSdlCalculation:
         sdl = self._get_sdl(deductions)
         assert sdl.rate == Decimal("0.0025")
 
-    def test_sdl_cap_amount_set_when_below_threshold(self):
-        deductions = self.jur.calculate_deductions(Decimal("3000"), "ep")
-        sdl = self._get_sdl(deductions)
-        assert sdl.cap_amount == Decimal("11.25")
-
-    def test_sdl_cap_amount_none_when_above_threshold(self):
-        deductions = self.jur.calculate_deductions(Decimal("5000"), "ep")
-        sdl = self._get_sdl(deductions)
-        assert sdl.cap_amount is None
+    def test_sdl_cap_amount_always_set(self):
+        # cap_amount is informational — always the SSG max levy
+        for wage in (Decimal("500"), Decimal("3000"), Decimal("5000"), Decimal("100000")):
+            deductions = self.jur.calculate_deductions(wage, "ep")
+            sdl = self._get_sdl(deductions)
+            assert sdl.cap_amount == Decimal("11.25"), f"cap_amount missing at wage={wage}"
 
     def test_sdl_metadata_employer_cost(self):
         deductions = self.jur.calculate_deductions(Decimal("3000"), "ep")
@@ -109,12 +123,6 @@ class TestSdlCalculation:
             deductions = self.jur.calculate_deductions(Decimal("3000"), wpt)
             types = [d.deduction_type for d in deductions]
             assert "sdl" in types, f"SDL missing for work_pass_type={wpt!r}"
-
-    def test_sdl_rounding(self):
-        # $1 * 0.0025 = $0.0025, rounds to $0.00 (ROUND_HALF_UP)
-        deductions = self.jur.calculate_deductions(Decimal("1"), "ep")
-        sdl = self._get_sdl(deductions)
-        assert sdl.amount == Decimal("0.00")
 
     def test_sdl_amount_is_decimal(self):
         deductions = self.jur.calculate_deductions(Decimal("3000"), "ep")
