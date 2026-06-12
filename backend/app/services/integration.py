@@ -255,7 +255,7 @@ async def _sync_balances(
             await db.execute(
                 text(
                     "UPDATE accounts SET metadata_json = "
-                    "jsonb_set(COALESCE(metadata_json, '{}'), '{live_balance}', :val::jsonb) "
+                    "jsonb_set(COALESCE(metadata_json, '{}'), '{live_balance}', CAST(:val AS jsonb)) "
                     "WHERE id = :account_id"
                 ),
                 {
