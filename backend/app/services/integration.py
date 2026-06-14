@@ -252,10 +252,16 @@ async def _sync_balances(
 
             # Use jsonb_set pattern to update only the live_balance key
             # without replacing the entire metadata_json object
+            # Defensive base: jsonb_set requires an object. Rows can carry
+            # SQL NULL, jsonb 'null', or any non-object scalar — all of those
+            # would raise "cannot set path in scalar". Reset to '{}' first.
             await db.execute(
                 text(
                     "UPDATE accounts SET metadata_json = "
-                    "jsonb_set(COALESCE(metadata_json, '{}'), '{live_balance}', CAST(:val AS jsonb)) "
+                    "jsonb_set("
+                    "CASE WHEN jsonb_typeof(metadata_json) = 'object' THEN metadata_json "
+                    "ELSE CAST('{}' AS jsonb) END, "
+                    "'{live_balance}', CAST(:val AS jsonb)) "
                     "WHERE id = :account_id"
                 ),
                 {
