@@ -185,6 +185,10 @@ async def test_finalize_payroll_run(client: AsyncClient, auth_headers: dict):
     assert resp.status_code == 200, f"Finalize payroll failed: {resp.status_code}: {resp.text}"
     body = resp.json()
     assert body["status"] == "finalized"
+    # Finalize assigns a payslip document number (BL-PS-YYYY-NNNN)
+    assert body["document_number"], "finalize should assign a document_number"
+    assert body["document_number"].startswith("BL-PS-"), body["document_number"]
+    assert body["document_number"].split("-")[-1].isdigit()
 
 
 @pytest.mark.asyncio

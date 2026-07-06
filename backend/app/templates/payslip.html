@@ -22,6 +22,7 @@
       font-size: 24pt; font-weight: 700; letter-spacing: 0.08em;
       text-transform: uppercase; color: {{ theme.primary_color }};
     }
+    .doc-title .doc-number { font-size: 11pt; font-weight: 700; color: {{ theme.primary_color }}; margin-top: 6pt; }
     .doc-title .doc-sub { font-size: 10pt; color: #555; margin-top: 4pt; }
     .meta-grid { display: flex; gap: 40pt; margin-bottom: 28pt; }
     .meta-block h3 {
@@ -80,6 +81,7 @@
     </div>
     <div class="doc-title">
       <h2>Payslip</h2>
+      {% if payroll.document_number %}<div class="doc-number">{{ payroll.document_number }}</div>{% endif %}
       <div class="doc-sub">{{ payroll.month }}</div>
     </div>
   </div>
