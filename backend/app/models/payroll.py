@@ -59,6 +59,7 @@ class PayrollRun(Base):
     total_deductions: Mapped[float] = mapped_column(Numeric(19, 6), nullable=False, default=0)
     net_salary: Mapped[float] = mapped_column(Numeric(19, 6), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    document_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     payslip_file_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
     )

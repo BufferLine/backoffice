@@ -17,6 +17,7 @@ from app.models.payroll import Employee, PayrollDeduction, PayrollRun
 from app.services.audit import AuditService
 from app.services.changelog import track_status_change
 from app.services.file_storage import FileStorageService
+from app.services.payment import generate_reference_number
 from app.services.pdf import render_payslip_pdf
 from app.state_machines import InvalidTransitionError
 from app.state_machines.payroll import payroll_machine
@@ -233,6 +234,12 @@ async def finalize_payroll(
     new_state = payroll_machine.transition(run.status, "finalize")
     run.status = new_state
 
+    # Assign a payslip document number on first finalize. This is the payslip's
+    # own reference (BL-PS-YYYY-NNNN); the payment for this run later reuses it.
+    if not run.document_number:
+        run.document_number = await generate_reference_number(db, "payroll_run")
+        await db.flush()
+
     # Generate payslip PDF
     company_settings = await _get_company_settings(db)
 
@@ -251,6 +258,7 @@ async def finalize_payroll(
             "start_date": run.employee.start_date.isoformat() if run.employee.start_date else "",
         },
         "payroll": {
+            "document_number": run.document_number or "",
             "month": run.month.strftime("%B %Y"),
             "start_date": run.start_date.isoformat(),
             "end_date": run.end_date.isoformat(),
@@ -580,6 +588,7 @@ async def regenerate_payslip(
             "start_date": run.employee.start_date.isoformat() if run.employee.start_date else "",
         },
         "payroll": {
+            "document_number": run.document_number or "",
             "month": run.month.strftime("%B %Y"),
             "start_date": run.start_date.isoformat(),
             "end_date": run.end_date.isoformat(),

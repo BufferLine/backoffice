@@ -30,33 +30,54 @@ _ENTITY_PREFIX_MAP = {
 }
 
 
+def _next_seq(max_ref: str | None) -> int:
+    """Parse the trailing sequence from a reference like BL-PS-2026-0004."""
+    if max_ref is None:
+        return 1
+    try:
+        return int(max_ref.split("-")[-1]) + 1
+    except (ValueError, IndexError):
+        return 1
+
+
 async def generate_reference_number(
     db: AsyncSession,
     entity_type: str,
 ) -> str:
     """Generate a unique reference number like BL-PS-2026-0001.
 
-    Concurrent safety is provided by the partial unique index on
-    payments.reference_number — duplicates are caught at flush time
-    and the caller (record_payment / create_payment_from_entity)
-    surfaces the IntegrityError.
+    Payslips (``payroll_run``) share a single ``BL-PS`` series across two
+    tables: ``payroll_runs.document_number`` (assigned at finalize) and
+    ``payments.reference_number`` (payment reuses the run's number, but a
+    payment created without a linked run still allocates from the same
+    series). The next sequence is therefore the max over BOTH sources so
+    the two never collide.
+
+    Concurrent safety is provided by the partial unique indexes on both
+    columns — duplicates are caught at flush time and the caller surfaces
+    the IntegrityError.
     """
     code = _ENTITY_PREFIX_MAP.get(entity_type, "PAY")
     year = datetime.now(timezone.utc).year
     prefix = f"BL-{code}-{year}-"
 
-    result = await db.execute(
-        select(func.max(Payment.reference_number))
-        .where(Payment.reference_number.like(f"{prefix}%"))
-    )
-    max_ref = result.scalar_one_or_none()
-    if max_ref is None:
-        next_num = 1
-    else:
-        try:
-            next_num = int(max_ref.split("-")[-1]) + 1
-        except (ValueError, IndexError):
-            next_num = 1
+    payment_max = (
+        await db.execute(
+            select(func.max(Payment.reference_number))
+            .where(Payment.reference_number.like(f"{prefix}%"))
+        )
+    ).scalar_one_or_none()
+
+    next_num = _next_seq(payment_max)
+    if entity_type == "payroll_run":
+        run_max = (
+            await db.execute(
+                select(func.max(PayrollRun.document_number))
+                .where(PayrollRun.document_number.like(f"{prefix}%"))
+            )
+        ).scalar_one_or_none()
+        next_num = max(next_num, _next_seq(run_max))
+
     return f"{prefix}{next_num:04d}"
 
 
@@ -93,10 +114,21 @@ async def record_payment(
     if data.fx_rate_to_sgd is not None:
         sgd_value = Decimal(str(data.amount)) * Decimal(str(data.fx_rate_to_sgd))
 
-    # Auto-generate reference number if not provided
+    # Auto-generate reference number if not provided.
+    # A payment for a payroll_run reuses the run's payslip document number so
+    # the payslip PDF and the bank/payment reference always match.
     reference_number = data.reference_number
     if reference_number is None and data.related_entity_type:
-        reference_number = await generate_reference_number(db, data.related_entity_type)
+        if data.related_entity_type == "payroll_run" and data.related_entity_id:
+            run = (
+                await db.execute(
+                    select(PayrollRun.document_number)
+                    .where(PayrollRun.id == data.related_entity_id)
+                )
+            ).scalar_one_or_none()
+            reference_number = run
+        if reference_number is None:
+            reference_number = await generate_reference_number(db, data.related_entity_type)
 
     payment = Payment(
         payment_type=data.payment_type,
@@ -373,7 +405,12 @@ async def create_payment_from_entity(
     entity = await _fetch_entity(db, entity_type, entity_id)
     details = _resolve_entity_details(entity_type, entity)
 
-    reference_number = await generate_reference_number(db, entity_type)
+    # A payroll payment reuses the run's payslip document number so the payslip
+    # PDF and the bank/payment reference match; other entities allocate fresh.
+    if entity_type == "payroll_run" and getattr(entity, "document_number", None):
+        reference_number = entity.document_number
+    else:
+        reference_number = await generate_reference_number(db, entity_type)
 
     payment = Payment(
         payment_type=payment_type,

@@ -86,6 +86,7 @@ class PayrollRunResponse(BaseModel):
     total_deductions: Decimal
     net_salary: Decimal
     status: str
+    document_number: Optional[str] = None
     payslip_file_id: Optional[UUID]
     paid_at: Optional[datetime]
     payment_id: Optional[UUID]
@@ -120,6 +121,7 @@ class PayrollRunResponse(BaseModel):
                     "total_deductions": data.total_deductions,
                     "net_salary": data.net_salary,
                     "status": data.status,
+                    "document_number": data.document_number,
                     "payslip_file_id": data.payslip_file_id,
                     "paid_at": data.paid_at,
                     "payment_id": data.payment_id,
