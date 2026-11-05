@@ -45,6 +45,16 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] Handle IDEAL (corporate) CSV variant
 - [x] Register in statement_parsers registry
 
+#### Accrual Ledger & Stablecoin Receipts
+- [x] Receivable journal on invoice issue (Dr Receivable / Cr Revenue + GST output), reversal on cancel
+- [x] Ledger account mapping (`acct ledger set`) — opt-in
+- [x] `acct payment receive-crypto`: verified USDC/USDT receipt → payment + receipt journal (FX gain/loss) + paid
+- [x] Off-ramp FX conversion at weighted-average carrying rate with realised FX gain/loss
+- [x] Link conversion to the landing bank deposit (`--bank-tx`) to prevent double booking
+- [x] Bank-paid invoice deposits settle the receivable instead of booking revenue again
+- [ ] Partial / over-payments and bank-fee deductions on invoice settlement
+- [ ] Historical FX rates (MAS) for back-dated postings
+
 #### Crypto On-chain Verification
 - [ ] Verify `tx_hash` via Etherscan/Polygonscan API after payment recording
 - [ ] Check: transaction exists, amount matches, destination matches, N confirmations

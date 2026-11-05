@@ -4,6 +4,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_get, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -16,7 +17,7 @@ def record(
     entity: str = typer.Option(
         ..., "--entity", help="Entity reference, e.g. invoice:<id> or payroll_run:<id>"
     ),
-    amount: float = typer.Option(..., "--amount", help="Payment amount"),
+    amount: str = typer.Option(..., "--amount", help="Payment amount", callback=decimal_amount),
     currency: str = typer.Option("SGD", "--currency", help="Currency code"),
     tx_hash: Optional[str] = typer.Option(None, "--tx-hash", help="Crypto transaction hash"),
     chain: Optional[str] = typer.Option(None, "--chain", help="Blockchain network name"),
@@ -42,6 +43,47 @@ def record(
         payload["bank_reference"] = reference
     data = api_post("/api/payments", json_data=payload)
     print_success(f"Payment recorded: {data['id']}")
+    print_json(data)
+
+
+@app.command()
+def receive_crypto(
+    invoice: str = typer.Option(..., "--invoice", help="Issued invoice ID"),
+    account: str = typer.Option(..., "--account", help="Wallet account ID that received the coins (e.g. Coinbase USDC)"),
+    amount: str = typer.Option(..., "--amount", help="Amount received (must equal the invoice total)", callback=decimal_amount),
+    currency: str = typer.Option("USDC", "--currency", help="Coin received: USDC|USDT (settles a USD invoice)"),
+    tx_hash: Optional[str] = typer.Option(None, "--tx-hash", help="On-chain transaction hash"),
+    chain: Optional[str] = typer.Option(None, "--chain", help="Network, e.g. ethereum|base|solana"),
+    date: Optional[str] = typer.Option(None, "--date", help="Receipt date (YYYY-MM-DD, default today)"),
+    fx_rate: Optional[str] = typer.Option(
+        None, "--fx-rate", help="SGD per 1 coin on the receipt date (default: today's Airwallex USD/SGD)",
+        callback=decimal_amount,
+    ),
+    notes: Optional[str] = typer.Option(None, "--notes", help="Notes, e.g. how the amount was verified"),
+) -> None:
+    """Record a verified stablecoin receipt: payment + receipt journal + invoice paid.
+
+    Verify the amount, destination address, and confirmations on-chain (or in Coinbase)
+    BEFORE running this; the backoffice does not verify the transaction itself.
+    """
+    payload: dict = {
+        "invoice_id": invoice,
+        "wallet_account_id": account,
+        "amount": amount,
+        "currency": currency.upper(),
+    }
+    for key, value in (
+        ("tx_hash", tx_hash), ("chain_id", chain), ("payment_date", date),
+        ("fx_rate_to_sgd", fx_rate), ("notes", notes),
+    ):
+        if value:
+            payload[key] = value
+    data = api_post("/api/payments/receive-crypto", json_data=payload)
+    print_success(f"Crypto receipt recorded: {data['id']} ({data['currency']} {data['amount']})")
+    print_success(f"SGD value {data.get('sgd_value')} @ {data.get('fx_rate_to_sgd')} ({data.get('fx_rate_source')})")
+    if data.get("journal_entry_id"):
+        print_success(f"Journal entry created: {data['journal_entry_id']}")
+    print_success(f"Invoice {invoice} marked as paid")
     print_json(data)
 
 
@@ -133,7 +175,7 @@ def attach(
 def allocate(
     payment_id: str = typer.Argument(..., help="Payment ID"),
     entity: str = typer.Option(..., "--entity", help="Entity reference, e.g. loan:<id>"),
-    amount: float = typer.Option(..., "--amount", help="Amount to allocate"),
+    amount: str = typer.Option(..., "--amount", help="Amount to allocate", callback=decimal_amount),
     notes: Optional[str] = typer.Option(None, "--notes", help="Allocation notes"),
 ) -> None:
     """Allocate a payment to an entity (e.g. loan)."""

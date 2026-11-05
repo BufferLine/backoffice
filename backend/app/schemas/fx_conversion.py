@@ -14,6 +14,7 @@ class FxConversionCreate(BaseModel):
     buy_amount: Decimal
     sell_account_id: UUID
     buy_account_id: UUID
+    bank_transaction_id: Optional[UUID] = None
     provider: Optional[str] = None
     reference: Optional[str] = None
     notes: Optional[str] = None
@@ -43,6 +44,7 @@ class FxConversionResponse(BaseModel):
     sell_account_id: UUID
     buy_account_id: UUID
     journal_entry_id: Optional[UUID]
+    bank_transaction_id: Optional[UUID] = None
     provider: Optional[str]
     reference: Optional[str]
     notes: Optional[str]

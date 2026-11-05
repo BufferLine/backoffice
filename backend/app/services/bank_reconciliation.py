@@ -6,6 +6,7 @@ from typing import BinaryIO, Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.account import Account
 from app.models.bank_transaction import BankTransaction
 from app.models.file import File
 from app.models.payment import Payment
@@ -327,20 +328,37 @@ async def reconcile_transaction(
     db: AsyncSession,
     tx_id: uuid.UUID,
     bank_account_id: uuid.UUID,
-    contra_account_id: uuid.UUID,
+    contra_account_id: Optional[uuid.UUID],
     actor_id: uuid.UUID,
     description: Optional[str] = None,
     auto_confirm: bool = True,
+    fx_rate_to_sgd: Optional[Decimal] = None,
 ) -> BankTransaction:
     """Reconcile a bank transaction by creating a journal entry.
 
     For deposits (amount > 0): debit bank_account, credit contra_account.
     For withdrawals (amount < 0): debit contra_account, credit bank_account.
+
+    A deposit matched to a payment for an invoice whose receivable was posted at
+    issue settles that receivable instead (contra defaults to the receivable account;
+    revenue must not be booked twice). Foreign-currency settlements are rated and
+    book the FX difference against the issue-date rate.
     """
     tx = await _get_transaction(db, tx_id)
 
     if tx.match_status == "reconciled":
         raise ValueError(f"BankTransaction {tx_id} is already reconciled")
+
+    settled = await _invoice_settled_by(db, tx)
+    if settled is not None:
+        payment, invoice = settled
+        return await _reconcile_invoice_settlement(
+            db, tx, payment, invoice, bank_account_id, contra_account_id,
+            actor_id, description, auto_confirm, fx_rate_to_sgd,
+        )
+
+    if contra_account_id is None:
+        raise ValueError("contra_account_id is required unless the transaction settles a posted invoice")
 
     amount = abs(Decimal(str(tx.amount)))
     is_deposit = Decimal(str(tx.amount)) > 0
@@ -400,4 +418,122 @@ async def _get_transaction(db: AsyncSession, tx_id: uuid.UUID) -> BankTransactio
     tx = result.scalar_one_or_none()
     if tx is None:
         raise ValueError(f"BankTransaction {tx_id} not found")
+    return tx
+
+
+async def _invoice_settled_by(db: AsyncSession, tx: BankTransaction):
+    """(payment, invoice) when a deposit is matched to a payment for an invoice with a posted receivable."""
+    from app.models.invoice import Invoice
+
+    if tx.matched_payment_id is None or Decimal(str(tx.amount)) <= 0:
+        return None
+    payment = (await db.execute(select(Payment).where(Payment.id == tx.matched_payment_id))).scalar_one_or_none()
+    if payment is None or payment.related_entity_type != "invoice" or payment.related_entity_id is None:
+        return None
+    invoice = (
+        await db.execute(select(Invoice).where(Invoice.id == payment.related_entity_id))
+    ).scalar_one_or_none()
+    if invoice is None or invoice.journal_entry_id is None:
+        return None
+    return payment, invoice
+
+
+async def _reconcile_invoice_settlement(
+    db: AsyncSession,
+    tx: BankTransaction,
+    payment: Payment,
+    invoice,
+    bank_account_id: uuid.UUID,
+    contra_account_id: Optional[uuid.UUID],
+    actor_id: uuid.UUID,
+    description: Optional[str],
+    auto_confirm: bool,
+    fx_rate_to_sgd: Optional[Decimal],
+) -> BankTransaction:
+    from app.services import ledger
+
+    await ledger.lock_invoice(db, invoice.id)
+    if invoice.status not in ("issued", "paid"):
+        raise ValueError(
+            f"Invoice {invoice.invoice_number} is {invoice.status}; its receivable was reversed. "
+            "Reconcile this deposit with an explicit contra account (e.g. a customer credit/refund liability)"
+        )
+    if payment.journal_entry_id is not None or await ledger.receivable_settled(db, invoice.id):
+        raise ValueError(
+            f"Invoice {invoice.invoice_number} receivable is already settled (payment journal exists); "
+            "this deposit would book it twice. Mark it with `acct bank tx-ignore` or reconcile with an explicit contra"
+        )
+
+    ar_line = await ledger.receivable_line(db, invoice)
+    receivable_id = ar_line.account_id
+    if contra_account_id is not None and contra_account_id != receivable_id:
+        raise ValueError(
+            f"Invoice {invoice.invoice_number} revenue was already booked at issue; "
+            "reconcile against its receivable account (omit contra_account_id)"
+        )
+    if not ledger.settles_in(tx.currency, invoice.currency):
+        raise ValueError(
+            f"A {tx.currency} deposit cannot settle {invoice.currency} invoice {invoice.invoice_number}; "
+            "record the settlement manually"
+        )
+
+    bank_account = (await db.execute(select(Account).where(Account.id == bank_account_id))).scalar_one_or_none()
+    if bank_account is None:
+        raise ValueError(f"Bank account {bank_account_id} not found")
+    if bank_account.currency != tx.currency:
+        raise ValueError(f"Bank account currency {bank_account.currency} does not match deposit currency {tx.currency}")
+
+    mapping = await ledger.get_ledger_accounts(db)
+    amount = Decimal(str(tx.amount))
+    if amount != Decimal(str(ar_line.debit)):
+        raise ValueError(
+            f"Deposit {tx.currency} {amount} differs from invoice {invoice.invoice_number} receivable "
+            f"{ar_line.currency} {ar_line.debit} (e.g. bank fees); record the settlement manually"
+        )
+
+    quote = await ledger.resolve_fx_rate_to_sgd(tx.currency, tx.tx_date, fx_rate_to_sgd)
+    label = invoice.invoice_number or str(invoice.id)
+    lines = ledger.build_receipt_lines(
+        amount=amount,
+        currency=tx.currency,
+        receipt_rate=quote.rate,
+        wallet_id=bank_account_id,
+        receivable_amount=Decimal(str(ar_line.debit)),
+        receivable_currency=ar_line.currency,
+        receivable_rate=Decimal(str(ar_line.fx_rate_to_sgd)),
+        receivable_id=receivable_id,
+        fx_gain_loss_id=mapping.fx_gain_loss,
+        label=label,
+    )
+    entry = await create_journal_entry(
+        db,
+        JournalEntryCreate(
+            entry_date=tx.tx_date,
+            description=description or f"Invoice {label} settled by bank deposit {tx.source_tx_id}",
+            source_type="bank_import",
+            source_id=tx.id,
+            is_confirmed=auto_confirm,
+            lines=lines,
+        ),
+        created_by=actor_id,
+    )
+    payment.journal_entry_id = entry.id
+    tx.match_status = "reconciled"
+    tx.account_id = bank_account_id
+    await db.flush()
+
+    await AuditService(db).log(
+        action="bank_transaction.reconcile",
+        entity_type="bank_transaction",
+        entity_id=tx.id,
+        actor_id=actor_id,
+        input_data={
+            "journal_entry_id": str(entry.id),
+            "bank_account_id": str(bank_account_id),
+            "contra_account_id": str(receivable_id),
+            "invoice_id": str(invoice.id),
+            "fx_rate_to_sgd": str(quote.rate),
+            "fx_rate_source": quote.source,
+        },
+    )
     return tx

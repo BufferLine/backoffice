@@ -15,6 +15,7 @@ from app.schemas.invoice import (
     InvoiceListResponse,
     InvoiceResponse,
     InvoiceUpdate,
+    IssueInvoiceRequest,
     LineItemCreate,
     LineItemResponse,
     LineItemUpdate,
@@ -199,6 +200,7 @@ async def issue_invoice(
     current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     file_storage: Annotated[FileStorageService, Depends(get_file_storage)],
+    body: Optional[IssueInvoiceRequest] = None,
 ) -> InvoiceResponse:
     invoice = await invoice_service.get_invoice(db, invoice_id)
     if invoice is None:
@@ -210,6 +212,7 @@ async def issue_invoice(
             invoice=invoice,
             user_id=current_user.id,
             file_storage=file_storage,
+            fx_rate_to_sgd=body.fx_rate_to_sgd if body else None,
         )
     except InvalidTransitionError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
@@ -246,6 +249,30 @@ async def mark_paid(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
+    await db.commit()
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise _not_found()
+    return InvoiceResponse.model_validate(invoice)
+
+
+@router.post("/{invoice_id}/post-journal", response_model=InvoiceResponse)
+async def post_invoice_journal(
+    invoice_id: uuid.UUID,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("journal:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: Optional[IssueInvoiceRequest] = None,
+) -> InvoiceResponse:
+    """Backfill the receivable journal entry for an invoice issued before ledger posting."""
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise _not_found()
+    try:
+        await invoice_service.post_invoice_journal(
+            db, invoice, current_user.id, fx_rate_to_sgd=body.fx_rate_to_sgd if body else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     await db.commit()
     invoice = await invoice_service.get_invoice(db, invoice_id)
     if invoice is None:

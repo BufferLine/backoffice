@@ -9,6 +9,8 @@ Run:
     cd backend && source .venv/bin/activate && pytest tests/ -v
 """
 
+import os
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -23,7 +25,10 @@ from app.models.currency import Currency
 from app.services.auth import create_superadmin, seed_permissions, seed_roles
 from app.services.file_storage import ALLOWED_MIME_TYPES, FileStorageService, get_file_storage
 
-TEST_DATABASE_URL = "postgresql+asyncpg://backoffice:devpassword123@localhost:5432/backoffice_test"
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://backoffice:devpassword123@localhost:5432/backoffice_test",
+)
 
 
 class MockFileStorageService(FileStorageService):

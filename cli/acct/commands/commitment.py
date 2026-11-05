@@ -2,6 +2,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_delete, api_get, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -40,7 +41,7 @@ def add(
     name: str = typer.Option(..., "--name", help="Commitment name"),
     category: str = typer.Option(..., "--category", help="Outflow category"),
     currency: str = typer.Option("SGD", "--currency", help="Currency code"),
-    amount: float = typer.Option(..., "--amount", help="Expected amount"),
+    amount: str = typer.Option(..., "--amount", help="Expected amount", callback=decimal_amount),
     frequency: str = typer.Option(..., "--frequency", help="Frequency: monthly|quarterly|yearly"),
     account_id: Optional[str] = typer.Option(None, "--account", help="Account ID"),
     vendor: Optional[str] = typer.Option(None, "--vendor", help="Vendor name"),
@@ -51,7 +52,7 @@ def add(
         "name": name,
         "category": category,
         "currency": currency,
-        "expected_amount": str(amount),
+        "expected_amount": amount,
         "frequency": frequency,
     }
     if account_id:

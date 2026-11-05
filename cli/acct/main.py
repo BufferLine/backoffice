@@ -6,7 +6,7 @@ from acct.commands import auth, automation, bank, changelog, client, employee, e
 from acct.commands import account, transaction, commitment
 from acct.commands import payment_method
 from acct.commands import integration, loan
-from acct.commands import journal, report, fx
+from acct.commands import journal, report, fx, ledger
 from acct.api_client import api_post
 from acct.config import save_credentials
 from acct.formatters import print_success
@@ -40,6 +40,7 @@ app.add_typer(loan.app, name="loan")
 app.add_typer(journal.app, name="journal")
 app.add_typer(report.app, name="report")
 app.add_typer(fx.app, name="fx")
+app.add_typer(ledger.app, name="ledger")
 
 
 AGENT_GUIDE = """
@@ -63,6 +64,23 @@ expenses, payments, and double-entry bookkeeping.
     --bank-account ASSET_UUID \\
     --contra-account EXPENSE_UUID              # Create the journal entry
   acct report trial-balance                    # Verify everything balances
+
+## Stablecoin (USDC/USDT) invoices
+
+Invoices are issued in USD; clients pay USDC/USDT into Coinbase; USDC is held and
+converted to SGD later, landing in Aspire. The ledger is accrual-based (SGD functional):
+
+  acct ledger show                              # Must be configured (receivable/revenue/fx)
+  acct invoice issue INV_ID [--fx-rate R]       # Posts Dr Receivable-USD / Cr Revenue
+  # VERIFY the receipt first: amount, destination address, confirmations (explorer/Coinbase).
+  acct payment receive-crypto --invoice INV_ID --account COINBASE_USDC_UUID \
+    --amount 3750 --tx-hash 0x... --chain base [--fx-rate R]
+  # Later, when the off-ramped SGD appears in Aspire (bank tx), record the conversion
+  # and point it at that deposit so it is NOT reconciled a second time:
+  acct fx record --sell-currency USDC --sell-amount N --buy-currency SGD --buy-amount M \
+    --sell-account COINBASE_USDC_UUID --buy-account ASPIRE_SGD_UUID --date D --bank-tx TX_ID
+
+Never record a receipt you have not verified on-chain. Amounts are exact decimals.
 
 ## How to classify transactions
 
@@ -88,10 +106,11 @@ Over time you should need to ask less and less.
   Bookkeeping:  acct journal create|list|confirm|delete
   Reports:      acct report trial-balance
   Bank:         acct bank statement-upload|tx-list|tx-reconcile|tx-auto-match
-  Invoicing:    acct invoice create|list|issue|mark-paid
+  Invoicing:    acct invoice create|list|issue|mark-paid|post-journal
   Payroll:      acct payroll create|review|finalize|mark-paid
   Expenses:     acct expense create|list|confirm|reimburse
-  Payments:     acct payment record|list|link
+  Payments:     acct payment record|receive-crypto|list|link
+  Ledger:       acct ledger show|set
   FX:           acct fx record|list|show
   Accounts:     acct account create|list|balance
 

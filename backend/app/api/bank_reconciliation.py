@@ -115,6 +115,7 @@ async def reconcile_bank_transaction(
             actor_id=current_user.id,
             description=data.description,
             auto_confirm=data.auto_confirm,
+            fx_rate_to_sgd=data.fx_rate_to_sgd,
         )
     except ValueError as e:
         detail = str(e)

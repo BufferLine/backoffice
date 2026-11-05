@@ -3,6 +3,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_get, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -14,7 +15,7 @@ def add(
     date: str = typer.Option(..., "--date", help="Expense date (YYYY-MM-DD)"),
     vendor: str = typer.Option(..., "--vendor", help="Vendor name"),
     category: str = typer.Option(..., "--category", help="Expense category"),
-    amount: float = typer.Option(..., "--amount", help="Expense amount"),
+    amount: str = typer.Option(..., "--amount", help="Expense amount", callback=decimal_amount),
     currency: str = typer.Option("SGD", "--currency", help="Currency code"),
     description: str = typer.Option("", "--description", help="Optional description"),
 ) -> None:

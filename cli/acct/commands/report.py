@@ -25,7 +25,7 @@ def trial_balance(
 
     print_table(
         f"Trial Balance as of {data.get('as_of', 'today')}",
-        ["Account", "Class", "Currency", "Debit", "Credit", "Balance"],
+        ["Account", "Class", "Currency", "Debit", "Credit", "Balance", "Balance (SGD)"],
         [
             [
                 r.get("account_name", ""),
@@ -34,12 +34,14 @@ def trial_balance(
                 r.get("total_debit", "0"),
                 r.get("total_credit", "0"),
                 r.get("balance", "0"),
+                r.get("balance_sgd") or "-",
             ]
             for r in rows
         ],
     )
 
-    total_d = data.get("total_debit", "0")
-    total_c = data.get("total_credit", "0")
+    # Decide on SGD equivalents: native sums mix currencies in multi-currency books.
+    total_d = data.get("total_debit_sgd") or data.get("total_debit", "0")
+    total_c = data.get("total_credit_sgd") or data.get("total_credit", "0")
     balanced = data.get("is_balanced", False)
-    typer.echo(f"\nTotal Debit: {total_d}  |  Total Credit: {total_c}  |  Balanced: {'Yes' if balanced else 'NO'}")
+    typer.echo(f"\nTotal Debit (SGD): {total_d}  |  Total Credit (SGD): {total_c}  |  Balanced: {'Yes' if balanced else 'NO'}")

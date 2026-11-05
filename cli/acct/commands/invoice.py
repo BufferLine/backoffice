@@ -3,6 +3,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_delete, api_download, api_get, api_patch, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -52,8 +53,8 @@ def edit(
 def add_item(
     invoice_id: str = typer.Argument(..., help="Invoice ID"),
     desc: str = typer.Option(..., "--desc", help="Line item description"),
-    qty: float = typer.Option(..., "--qty", help="Quantity"),
-    price: float = typer.Option(..., "--price", help="Unit price"),
+    qty: str = typer.Option(..., "--qty", help="Quantity", callback=decimal_amount),
+    price: str = typer.Option(..., "--price", help="Unit price", callback=decimal_amount),
     tax_code: str = typer.Option("SR", "--tax-code", help="Tax code: SR=Standard Rate, ZR=Zero-Rated, ES=Exempt, NT=Not Taxable"),
     tax_rate: Optional[float] = typer.Option(None, "--tax-rate", help="Override tax rate (e.g. 0.09 for 9%)"),
 ) -> None:
@@ -72,10 +73,32 @@ def add_item(
 @app.command()
 def issue(
     invoice_id: str = typer.Argument(..., help="Invoice ID"),
+    fx_rate: Optional[str] = typer.Option(
+        None, "--fx-rate",
+        help="SGD per 1 unit of the invoice currency (non-SGD invoices; default: today's Airwallex rate)",
+        callback=decimal_amount,
+    ),
 ) -> None:
-    """Issue (send) a draft invoice."""
-    data = api_post(f"/api/invoices/{invoice_id}/issue")
+    """Issue (send) a draft invoice. Posts the receivable journal when ledger accounts are set."""
+    body = {"fx_rate_to_sgd": fx_rate} if fx_rate else None
+    data = api_post(f"/api/invoices/{invoice_id}/issue", json_data=body)
     print_success(f"Invoice {invoice_id} issued")
+    if data.get("journal_entry_id"):
+        print_success(f"Receivable journal entry: {data['journal_entry_id']}")
+    print_json(data)
+
+
+@app.command()
+def post_journal(
+    invoice_id: str = typer.Argument(..., help="Issued invoice ID"),
+    fx_rate: Optional[str] = typer.Option(
+        None, "--fx-rate", help="SGD per 1 unit of the invoice currency on its issue date", callback=decimal_amount,
+    ),
+) -> None:
+    """Post the receivable journal for an invoice issued before ledger accounts were set."""
+    body = {"fx_rate_to_sgd": fx_rate} if fx_rate else None
+    data = api_post(f"/api/invoices/{invoice_id}/post-journal", json_data=body)
+    print_success(f"Receivable journal entry: {data.get('journal_entry_id')}")
     print_json(data)
 
 

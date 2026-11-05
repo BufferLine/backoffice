@@ -56,7 +56,7 @@ class JournalLine(Base):
     debit: Mapped[float] = mapped_column(Numeric(19, 6), nullable=False, default=0)
     credit: Mapped[float] = mapped_column(Numeric(19, 6), nullable=False, default=0)
     currency: Mapped[str] = mapped_column(
-        String(3), ForeignKey("currencies.code", ondelete="RESTRICT"), nullable=False
+        String(10), ForeignKey("currencies.code", ondelete="RESTRICT"), nullable=False
     )
     fx_rate_to_sgd: Mapped[float | None] = mapped_column(Numeric(19, 6), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

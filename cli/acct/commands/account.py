@@ -2,6 +2,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_get, api_patch, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -56,7 +57,7 @@ def create(
     institution: Optional[str] = typer.Option(None, "--institution", help="Institution name"),
     account_number: Optional[str] = typer.Option(None, "--account-number", help="Account number"),
     wallet_address: Optional[str] = typer.Option(None, "--wallet-address", help="Wallet address"),
-    opening_balance: float = typer.Option(0.0, "--opening-balance", help="Opening balance"),
+    opening_balance: str = typer.Option("0", "--opening-balance", help="Opening balance", callback=decimal_amount),
     opening_balance_date: str = typer.Option(..., "--opening-balance-date", help="Opening balance date (YYYY-MM-DD)"),
 ) -> None:
     """Create a new account."""
@@ -64,7 +65,7 @@ def create(
         "name": name,
         "account_type": account_type,
         "currency": currency,
-        "opening_balance": str(opening_balance),
+        "opening_balance": opening_balance,
         "opening_balance_date": opening_balance_date,
     }
     if account_class:
