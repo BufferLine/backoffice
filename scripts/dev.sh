@@ -13,10 +13,10 @@ if [ -f .env ]; then
   set +a
 fi
 
-DB_PASSWORD="${DB_PASSWORD:-devpassword123}"
-MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}"
-MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-miniodevpassword123}"
-JWT_SECRET="${JWT_SECRET:-dev_jwt_secret_change_in_production_32chars}"
+export DB_PASSWORD="${DB_PASSWORD:-devpassword123}"
+export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}"
+export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-miniodevpassword123}"
+export JWT_SECRET="${JWT_SECRET:-dev_jwt_secret_change_in_production_32chars}"
 
 echo "=== Starting Backoffice Dev Server ==="
 
