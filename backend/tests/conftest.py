@@ -1,13 +1,16 @@
 """
 Test configuration for E2E integration tests.
 
-Prerequisites:
-    The 'backoffice_test' PostgreSQL database must exist:
-        PGPASSWORD=devpassword123 createdb -h localhost -U backoffice backoffice_test
+Run via CI (creates the 'backoffice_test' DB in the compose Postgres if missing):
+    scripts/ci.sh
 
-Run:
-    cd backend && source .venv/bin/activate && pytest tests/ -v
+Run directly (the target DB must exist; its public schema is dropped and recreated):
+    python -m pytest backend/tests/ --ignore=backend/tests/unit -v
+
+Set TEST_DATABASE_URL to point at a different database (default below).
 """
+
+import os
 
 import pytest
 import pytest_asyncio
@@ -23,7 +26,10 @@ from app.models.currency import Currency
 from app.services.auth import create_superadmin, seed_permissions, seed_roles
 from app.services.file_storage import ALLOWED_MIME_TYPES, FileStorageService, get_file_storage
 
-TEST_DATABASE_URL = "postgresql+asyncpg://backoffice:devpassword123@localhost:5432/backoffice_test"
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://backoffice:devpassword123@localhost:5432/backoffice_test",
+)
 
 
 class MockFileStorageService(FileStorageService):

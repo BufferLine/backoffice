@@ -3,8 +3,9 @@
 ## Quick Reference
 
 ```bash
-scripts/ci.sh                              # Full CI: unit + soft-reset + API E2E + soft-reset + CLI E2E
+scripts/ci.sh                              # Full CI: unit + integration + soft-reset + API E2E + soft-reset + CLI E2E
 python -m pytest backend/tests/unit/ -v    # Unit tests only (no server needed)
+python -m pytest backend/tests/ --ignore=backend/tests/unit  # Integration tests (needs Postgres, see below)
 scripts/soft-reset.sh                      # Fast DB reset (drop/recreate + migrations, Docker stays up)
 scripts/e2e.sh                             # API E2E only (server must be running, fresh DB)
 scripts/e2e-cli.sh                         # CLI E2E only (server must be running, fresh DB)
@@ -37,7 +38,39 @@ Pure logic tests with no database or server dependency.
 
 **When to run**: Always — before every commit.
 
-### Tier 2: API E2E (40 tests, ~10s)
+### Tier 2: Integration Tests (181 tests, ~5s)
+
+pytest tests that run the FastAPI app in-process (httpx `ASGITransport`, no
+server) against a real PostgreSQL database. File storage is mocked in memory,
+so MinIO is not needed. They cover endpoints, services, and DB constraints
+together: accounts/journal balances, invoices, payroll, auth, settings, etc.
+
+**Location**: `backend/tests/test_*.py` (fixtures in `backend/tests/conftest.py`)
+
+**Database**: `TEST_DATABASE_URL`, default
+`postgresql+asyncpg://backoffice:devpassword123@localhost:5432/backoffice_test`.
+The session fixture **drops and recreates the `public` schema** of that
+database at start and end, so never point it at a DB whose data you need.
+`scripts/ci.sh` creates `backoffice_test` in the compose Postgres if missing
+(and uses `DB_PASSWORD` from `.env` when set).
+
+**Run** (outside `ci.sh`, with the compose DB up):
+
+```bash
+docker compose exec -T db createdb -U backoffice backoffice_test   # once
+python -m pytest backend/tests/ --ignore=backend/tests/unit -v
+```
+
+Or against any other Postgres:
+
+```bash
+TEST_DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/somedb \
+  python -m pytest backend/tests/ --ignore=backend/tests/unit -v
+```
+
+**When to run**: Before opening a PR, if backend code changed.
+
+### Tier 3: API E2E (40 tests, ~10s)
 
 HTTP-level tests against a running server. Covers full business workflows via REST API.
 
@@ -45,7 +78,7 @@ HTTP-level tests against a running server. Covers full business workflows via RE
 
 **When to run**: Before opening a PR.
 
-### Tier 3: CLI E2E (38 tests, ~15s)
+### Tier 4: CLI E2E (38 tests, ~15s)
 
 End-to-end tests through the `acct` CLI tool. Covers the full workflow from onboarding to month-end.
 
@@ -55,13 +88,18 @@ End-to-end tests through the `acct` CLI tool. Covers the full workflow from onbo
 
 ## CI Pipeline (`scripts/ci.sh`)
 
-Runs all three tiers sequentially with automatic resets between E2E phases:
+Runs all four tiers sequentially with automatic resets between E2E phases:
 
 ```
-Phase 1: Unit Tests         (no server)
-Phase 2: Reset → API E2E    (fresh DB)
-Phase 3: Reset → CLI E2E    (fresh DB)
+Setup:   backend/.venv with backend[dev] (reinstalled when pyproject.toml changes)
+Phase 1: Unit Tests          (no server)
+Phase 2: Integration Tests   (Postgres: backoffice_test or $TEST_DATABASE_URL)
+Phase 3: Reset → API E2E     (fresh DB)
+Phase 4: Reset → CLI E2E     (fresh DB)
 ```
+
+All phases run inside `backend/.venv`, never a global interpreter, so pytest
+always sees the dependency versions declared in `backend/pyproject.toml`.
 
 **When to run**: Before opening a PR. Required to pass for merge.
 
@@ -70,7 +108,7 @@ Phase 3: Reset → CLI E2E    (fresh DB)
 Before opening a PR, ensure:
 
 1. `python -m pytest backend/tests/unit/ -v` — all pass
-2. If you changed backend code: `scripts/ci.sh` — all pass
+2. If you changed backend code: `scripts/ci.sh` — all pass (includes integration tests)
 3. If you added new logic: add unit tests in `backend/tests/unit/`
 4. If you changed API endpoints: verify `scripts/e2e.sh` passes
 5. If you changed CLI commands: verify `scripts/e2e-cli.sh` passes
@@ -114,7 +152,7 @@ class TestInvoiceStateMachine:
 ### What NOT to Unit Test
 
 - Database queries → integration tests (`backend/tests/test_*.py`)
-- API endpoints with DB → E2E tests
+- API endpoints with DB → integration tests, or E2E for multi-step workflows
 - External API calls → mock them
 
 ## Coverage
