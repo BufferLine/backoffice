@@ -68,6 +68,14 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [x] FX rate fetching for `fx_rate_to_sgd` on payments
 - [x] Payment link generation for international invoice clients
 
+#### Aspire API
+- [x] API client module (`ASPIRE_CLIENT_ID`, `ASPIRE_API_KEY` env vars)
+- [x] Token auth flow (`POST /login` client_credentials, 15min bearer token)
+- [x] Transaction history sync → `BankTransaction` records (minor units → Decimal, SGT dates)
+- [x] Balance sync for active debit accounts → `Account.metadata_json.live_balance`
+- [ ] Transfers / payouts (needs `transfers` scope + OTP flow)
+- [ ] Webhooks for transfer status
+
 #### Stripe Payment Collection
 - [ ] Stripe Payment Link generation on invoice issue
 - [ ] Embed payment link/button in invoice PDF

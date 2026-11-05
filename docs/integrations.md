@@ -16,7 +16,8 @@ API Layer
 Integration Service (orchestration)
     │
     ├── Provider Registry
-    │   └── AirwallexProvider  (only implemented provider)
+    │   ├── AirwallexProvider
+    │   └── AspireProvider
     │
     ├── Webhook Service (verify → dedup → process)
     ├── Sync Scheduler (APScheduler, in-process)
@@ -35,6 +36,7 @@ Existing Services (unchanged)
 | Provider   | sync_txns | sync_balance | webhook | payment_link | transfer | verify_payment | push_invoice |
 |------------|:---------:|:------------:|:-------:|:------------:|:--------:|:--------------:|:------------:|
 | Airwallex  |     ✓     |      ✓       |    ✓    |      -       |    ✓     |       -        |      -       |
+| Aspire     |     ✓     |      ✓       |    -    |      -       |    -     |       -        |      -       |
 
 ### Planned (not yet implemented)
 
@@ -55,7 +57,8 @@ backend/app/integrations/
 ├── exceptions.py            # ProviderAPIError, RateLimitError, WebhookSignatureError
 ├── providers/
 │   ├── __init__.py          # Imports all providers to trigger registration
-│   └── airwallex.py         # Implemented provider
+│   ├── airwallex.py         # Airwallex provider
+│   └── aspire.py            # Aspire provider (read-only)
 
 backend/app/models/integration.py     # IntegrationEvent, SyncState, Config
 backend/app/services/integration.py   # Sync orchestration
@@ -149,7 +152,7 @@ Scheduler → provider.sync_balances()
 
 - APScheduler AsyncIOScheduler (same event loop as FastAPI)
 - Configurable per provider: `ENABLE_SYNC_SCHEDULER=true`
-- Default intervals: Airwallex txns 30min, balance 15min; Wise txns 2hr, balance 1hr
+- Default intervals: Airwallex txns 30min, balance 15min; Aspire txns 30min, balance 15min; Wise txns 2hr, balance 1hr
 - Rate limit errors tracked; auto-skip after 5 consecutive failures
 
 ## Credentials
@@ -208,6 +211,58 @@ AIRWALLEX_BASE_URL=https://api.airwallex.com
 AIRWALLEX_WEBHOOK_SECRET=xxx
 ENABLE_SYNC_SCHEDULER=true
 ```
+
+## Aspire
+
+Read-only sync for the Aspire business account (transactions + balances).
+API reference: https://docs.api.aspireapp.com/api (OpenAPI spec: `/api/v1.yaml`).
+
+### Auth
+- `POST /public/v1/login` with `{"grant_type": "client_credentials", "client_id", "client_secret"}`
+- Returns `access_token` + `expires_in` (900s); cached in memory, refreshed 60s before expiry and on 401
+- Create the API key in the Aspire web app (API menu). The client secret is shown only once.
+
+### Transaction Sync
+- `GET /public/v1/transactions?start_date=YYYY-MM-DDTHH:mm:ssZ&page=N` (page-based, `metadata.next_page_url`)
+- `start_date` is required: first sync looks back `ASPIRE_SYNC_LOOKBACK_DAYS` (default 365); later syncs
+  start 7 days before the last sync so late-settling rows are picked up (duplicates are dropped by
+  the `(source, source_tx_id)` constraint)
+- Amounts are integers in minor units (`135000` = SGD 1,350.00; IDR/JPY have none); debits are negative
+- `tx_date` is the Singapore local date of the UTC `datetime`
+- `pending` card transactions are skipped until they post/settle
+- Only rows from active `debit` accounts are imported; credit-line (`advance`) rows are dropped even
+  though they share the SGD currency (account IDs from `GET /accounts`, cached 10 min)
+- If the first-ever backfill fails mid-way, the next run restarts from page 1 (the lookback window
+  moves between runs, so a saved page number would point at different rows)
+- Known limit: a row whose status changes later (e.g. `settled` → `refunded`) keeps its first snapshot
+- Maps to `BankTransaction` with `source="aspire"`, `source_tx_id=id`, `reference=reference`,
+  `counterparty=counterparty_name`, `description=ref_code` (the transaction ID shown in the Aspire app)
+
+### Balance Sync
+- `GET /public/v1/accounts` → active `debit` accounts only (credit-line `advance` accounts are ignored)
+- Aspire may hold several accounts per currency (e.g. USD via DBS SWIFT and via Currency Cloud);
+  balances are summed per currency, matching how transactions are merged into one ledger account
+- Maps each currency to `Account.metadata_json.live_balance` for accounts with `statement_source="aspire"`
+
+### Setup
+```bash
+acct account create --name "Aspire SGD" --type bank --currency SGD --institution Aspire \
+  --opening-balance-date 2026-10-01
+acct account update <account-id> --statement-source aspire   # link the account to the provider
+acct integration test aspire
+acct integration sync aspire
+```
+
+### Env Vars
+```
+ASPIRE_CLIENT_ID=xxx
+ASPIRE_API_KEY=xxx
+ASPIRE_BASE_URL=https://api.aspireapp.com/public/v1
+ASPIRE_SYNC_LOOKBACK_DAYS=365
+ENABLE_SYNC_SCHEDULER=true
+```
+
+Rate limit: < 100 requests/min per GET endpoint (429 on breach).
 
 ## DBS Statement Parser
 

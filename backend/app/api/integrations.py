@@ -62,6 +62,17 @@ async def receive_webhook(
 
 # --- Integration management endpoints ---
 
+def _is_configured(provider_name: str) -> bool:
+    """Whether the static credentials a provider needs are present in settings."""
+    from app.config import settings
+
+    if provider_name == "airwallex":
+        return bool(settings.AIRWALLEX_CLIENT_ID and settings.AIRWALLEX_API_KEY)
+    if provider_name == "aspire":
+        return bool(settings.ASPIRE_CLIENT_ID and settings.ASPIRE_API_KEY)
+    return False
+
+
 @router.get("/integrations", response_model=ProviderListResponse)
 async def list_integrations(
     current_user: Annotated[AuthenticatedUser, Depends(require_permission("integration:read"))],
@@ -70,11 +81,7 @@ async def list_integrations(
 
     providers = []
     for p in list_providers():
-        from app.config import settings
-
-        configured = False
-        if p.name == "airwallex":
-            configured = bool(settings.AIRWALLEX_CLIENT_ID and settings.AIRWALLEX_API_KEY)
+        configured = _is_configured(p.name)
 
         providers.append(
             ProviderCapabilityInfo(
@@ -100,11 +107,7 @@ async def get_integration(
     except KeyError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown provider: {provider}")
 
-    from app.config import settings
-
-    configured = False
-    if p.name == "airwallex":
-        configured = bool(settings.AIRWALLEX_CLIENT_ID and settings.AIRWALLEX_API_KEY)
+    configured = _is_configured(p.name)
 
     return ProviderCapabilityInfo(
         name=p.name,

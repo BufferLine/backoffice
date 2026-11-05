@@ -39,6 +39,27 @@ def configure_scheduler():
             replace_existing=True,
         )
 
+    # Aspire: transactions every 30min, balance every 15min (API limit: <100 RPM per endpoint)
+    if settings.ASPIRE_CLIENT_ID and settings.ASPIRE_API_KEY:
+        scheduler.add_job(
+            _run_sync_job,
+            "interval",
+            minutes=30,
+            id="aspire_sync_transactions",
+            args=["aspire", "sync_transactions"],
+            max_instances=1,
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            _run_sync_job,
+            "interval",
+            minutes=15,
+            id="aspire_sync_balance",
+            args=["aspire", "sync_balance"],
+            max_instances=1,
+            replace_existing=True,
+        )
+
     return scheduler
 
 

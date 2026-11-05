@@ -28,6 +28,7 @@ Pure logic tests with no database or server dependency.
 | `test_schemas.py` | 89 | Pydantic validation, safe_filename, PDF helpers |
 | `test_paynow_qr.py` | 20 | SGQR EMVCo TLV payload generation |
 | `test_airwallex.py` | 11 | Airwallex provider capabilities + FX/payment link |
+| `test_aspire.py` | 29 | Aspire provider auth, transaction/balance mapping, minor units |
 | `test_loans.py` | 41 | Loan state machine, interest calculation, repayment logic |
 | `test_loan_service.py` | 2 | Loan service edge cases |
 | `test_journal_schema.py` | 15 | Journal entry validation, multi-debit/credit |
