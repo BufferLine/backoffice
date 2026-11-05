@@ -2,6 +2,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_get, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -55,7 +56,7 @@ def list_transactions(
 def create(
     account_id: str = typer.Option(..., "--account", help="Account ID"),
     direction: str = typer.Option(..., "--direction", help="Direction: in or out"),
-    amount: float = typer.Option(..., "--amount", help="Amount"),
+    amount: str = typer.Option(..., "--amount", help="Amount", callback=decimal_amount),
     currency: str = typer.Option("SGD", "--currency", help="Currency code"),
     tx_date: str = typer.Option(..., "--date", help="Transaction date (YYYY-MM-DD)"),
     category: str = typer.Option(..., "--category", help="Transaction category"),
@@ -68,7 +69,7 @@ def create(
     payload: dict = {
         "account_id": account_id,
         "direction": direction,
-        "amount": str(amount),
+        "amount": amount,
         "currency": currency,
         "tx_date": tx_date,
         "category": category,

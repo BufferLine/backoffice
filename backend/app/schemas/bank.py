@@ -38,9 +38,13 @@ class BankTxMatchRequest(BaseModel):
 
 class BankTxReconcileRequest(BaseModel):
     bank_account_id: UUID
-    contra_account_id: UUID
+    # Optional when the deposit settles an invoice with a posted receivable
+    # (then the receivable account is used); required otherwise.
+    contra_account_id: Optional[UUID] = None
     description: Optional[str] = None
     auto_confirm: bool = True
+    # SGD per 1 unit, for foreign-currency invoice settlements when it cannot be fetched.
+    fx_rate_to_sgd: Optional[Decimal] = None
 
 
 class AutoMatchResultItem(BaseModel):

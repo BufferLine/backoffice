@@ -130,6 +130,10 @@ async def get_trial_balance(
             Account.currency,
             func.coalesce(func.sum(JournalLine.debit), 0).label("total_debit"),
             func.coalesce(func.sum(JournalLine.credit), 0).label("total_credit"),
+            # SGD equivalent (functional currency). Unrated lines come from single-currency
+            # entries, which balance nominally, so a rate of 1 keeps them neutral.
+            func.coalesce(func.sum(JournalLine.debit * func.coalesce(JournalLine.fx_rate_to_sgd, 1)), 0).label("debit_sgd"),
+            func.coalesce(func.sum(JournalLine.credit * func.coalesce(JournalLine.fx_rate_to_sgd, 1)), 0).label("credit_sgd"),
         )
         .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
         .join(Account, JournalLine.account_id == Account.id)
@@ -150,13 +154,18 @@ async def get_trial_balance(
     rows = []
     grand_debit = Decimal(0)
     grand_credit = Decimal(0)
+    grand_debit_sgd = Decimal(0)
+    grand_credit_sgd = Decimal(0)
 
     for row in rows_raw:
         td = Decimal(str(row.total_debit))
         tc = Decimal(str(row.total_credit))
-        balance = td - tc
+        ds = Decimal(str(row.debit_sgd))
+        cs = Decimal(str(row.credit_sgd))
         grand_debit += td
         grand_credit += tc
+        grand_debit_sgd += ds
+        grand_credit_sgd += cs
         rows.append(
             TrialBalanceRow(
                 account_id=row.account_id,
@@ -165,16 +174,32 @@ async def get_trial_balance(
                 currency=row.currency,
                 total_debit=td,
                 total_credit=tc,
-                balance=balance,
+                balance=td - tc,
+                balance_sgd=(ds - cs).quantize(Decimal("0.01")),
             )
         )
+
+    # Multi-currency entries are validated to balance in SGD within 0.01 each,
+    # so allow that much per such entry in the grand total.
+    mc_entries = select(JournalLine.journal_entry_id).join(
+        JournalEntry, JournalLine.journal_entry_id == JournalEntry.id
+    ).where(JournalEntry.entry_date <= as_of)
+    if confirmed_only:
+        mc_entries = mc_entries.where(JournalEntry.is_confirmed.is_(True))
+    mc_entries = mc_entries.group_by(JournalLine.journal_entry_id).having(
+        func.count(func.distinct(JournalLine.currency)) > 1
+    )
+    mc_count = (await db.execute(select(func.count()).select_from(mc_entries.subquery()))).scalar_one()
+    tolerance = Decimal("0.01") * mc_count
 
     return TrialBalanceResponse(
         as_of=as_of,
         rows=rows,
         total_debit=grand_debit,
         total_credit=grand_credit,
-        is_balanced=(grand_debit == grand_credit),
+        total_debit_sgd=grand_debit_sgd.quantize(Decimal("0.01")),
+        total_credit_sgd=grand_credit_sgd.quantize(Decimal("0.01")),
+        is_balanced=abs(grand_debit_sgd - grand_credit_sgd) <= tolerance,
     )
 
 

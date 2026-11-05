@@ -24,6 +24,20 @@ class PaymentCreate(BaseModel):
     idempotency_key: Optional[str] = None
 
 
+class CryptoReceiptCreate(BaseModel):
+    """A stablecoin/crypto receipt for an issued invoice, verified by the caller."""
+
+    invoice_id: UUID
+    wallet_account_id: UUID
+    amount: Decimal
+    currency: str
+    tx_hash: Optional[str] = None
+    chain_id: Optional[str] = None
+    payment_date: Optional[date] = None
+    fx_rate_to_sgd: Optional[Decimal] = None
+    notes: Optional[str] = None
+
+
 class PaymentResponse(BaseModel):
     id: UUID
     payment_type: str
@@ -38,6 +52,7 @@ class PaymentResponse(BaseModel):
     sgd_value: Optional[Decimal]
     tx_hash: Optional[str]
     chain_id: Optional[str]
+    journal_entry_id: Optional[UUID] = None
     reference_number: Optional[str]
     bank_reference: Optional[str]
     proof_file_id: Optional[UUID]

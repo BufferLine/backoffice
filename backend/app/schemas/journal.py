@@ -107,12 +107,17 @@ class TrialBalanceRow(BaseModel):
     currency: str
     total_debit: Decimal
     total_credit: Decimal
-    balance: Decimal
+    balance: Decimal  # native currency of the account
+    balance_sgd: Optional[Decimal] = None  # SGD equivalent at posted rates
 
 
 class TrialBalanceResponse(BaseModel):
     as_of: date
     rows: list[TrialBalanceRow]
+    # Native sums across all currencies (only meaningful for single-currency books).
     total_debit: Decimal
     total_credit: Decimal
+    # SGD-equivalent totals; ``is_balanced`` is decided on these.
+    total_debit_sgd: Optional[Decimal] = None
+    total_credit_sgd: Optional[Decimal] = None
     is_balanced: bool

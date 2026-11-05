@@ -378,8 +378,13 @@ async def issue_invoice(
     invoice: Invoice,
     user_id: uuid.UUID,
     file_storage: FileStorageService,
+    fx_rate_to_sgd: Optional[Decimal] = None,
 ) -> Invoice:
-    """Issue a draft invoice: validate, set dates, generate PDF, transition state."""
+    """Issue a draft invoice: validate, set dates, post receivable, generate PDF, transition state.
+
+    When ledger accounts are configured, the accounts-receivable journal entry is
+    posted before the PDF is generated so a missing FX rate fails fast.
+    """
     # Validate transition (raises InvalidTransitionError if not allowed)
     if not invoice_machine.can_transition(invoice.status, "issue"):
         raise InvalidTransitionError("invoice", invoice.status, "issue")
@@ -389,8 +394,9 @@ async def issue_invoice(
     if not invoice.line_items:
         raise ValueError("Cannot issue an invoice with no line items")
 
-    # Set dates
-    today = date.today()
+    # Set dates (Singapore local date; the server may run in UTC)
+    from app.services.ledger import today_local
+    today = today_local()
     invoice.issue_date = today
 
     # Calculate due date from client payment terms or company defaults
@@ -406,6 +412,10 @@ async def issue_invoice(
 
     from datetime import timedelta
     invoice.due_date = today + timedelta(days=payment_terms_days)
+
+    # Accrual posting: Dr receivable / Cr revenue (+ GST output). No-op without a ledger mapping.
+    from app.services import ledger
+    await ledger.post_invoice_issue(db, invoice, user_id, fx_rate_to_sgd=fx_rate_to_sgd)
 
     # Generate PDF — failure blocks issuance so the caller is informed
     pdf_data = await _generate_invoice_pdf(db, invoice, company, file_storage)
@@ -751,6 +761,20 @@ async def cancel_invoice(
     invoice.status = invoice_machine.transition(invoice.status, "cancel")
     await db.flush()
 
+    reversal_id = None
+    if old_status == "issued" and invoice.journal_entry_id is not None:
+        from app.services import ledger
+        reversal = await ledger.reverse_journal_entry(
+            db,
+            invoice.journal_entry_id,
+            entry_date=ledger.today_local(),
+            description=f"Invoice {invoice.invoice_number} cancelled (reverses receivable)",
+            source_type="invoice_cancel",
+            source_id=invoice.id,
+            actor_id=user_id,
+        )
+        reversal_id = str(reversal.id)
+
     await track_status_change(db, "invoice", invoice.id, old_status, invoice.status, changed_by=user_id)
 
     audit = AuditService(db)
@@ -759,7 +783,56 @@ async def cancel_invoice(
         entity_type="invoice",
         entity_id=invoice.id,
         actor_id=user_id,
-        output_data={"status": invoice.status},
+        output_data={"status": invoice.status, "reversal_journal_entry_id": reversal_id},
     )
 
+    return invoice
+
+
+async def post_invoice_journal(
+    db: AsyncSession,
+    invoice: Invoice,
+    user_id: uuid.UUID,
+    fx_rate_to_sgd: Optional[Decimal] = None,
+) -> Invoice:
+    """Backfill the receivable journal entry for an invoice issued before ledger posting."""
+    if invoice.status != "issued":
+        raise ValueError(f"Only issued invoices can be posted, current: {invoice.status}")
+    from app.models.bank_transaction import BankTransaction
+    from app.services import ledger
+
+    if Decimal(str(invoice.total_amount)) <= 0:
+        raise ValueError(f"Invoice {invoice.invoice_number} has a zero total; nothing to post")
+    if not (await ledger.get_ledger_accounts(db)).configured:
+        raise ValueError("Ledger accounts are not configured; run `acct ledger set` first")
+
+    # Before accrual posting, a received deposit was booked straight to revenue via
+    # bank reconcile. Posting a receivable now would book that revenue twice.
+    reconciled = (
+        await db.execute(
+            select(func.count(BankTransaction.id))
+            .join(Payment, BankTransaction.matched_payment_id == Payment.id)
+            .where(
+                Payment.related_entity_type == "invoice",
+                Payment.related_entity_id == invoice.id,
+                BankTransaction.match_status == "reconciled",
+            )
+        )
+    ).scalar_one()
+    if reconciled:
+        raise ValueError(
+            f"Invoice {invoice.invoice_number} already has a reconciled bank deposit (revenue booked at "
+            "reconcile); posting a receivable would double-count revenue. Mark the invoice paid instead"
+        )
+
+    entry = await ledger.post_invoice_issue(db, invoice, user_id, fx_rate_to_sgd=fx_rate_to_sgd)
+    if entry is None:
+        raise ValueError("Ledger accounts are not configured; run `acct ledger set` first")
+    await AuditService(db).log(
+        action="post_journal",
+        entity_type="invoice",
+        entity_id=invoice.id,
+        actor_id=user_id,
+        output_data={"journal_entry_id": str(entry.id)},
+    )
     return invoice

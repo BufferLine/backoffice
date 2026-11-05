@@ -2,6 +2,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_get, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -11,7 +12,7 @@ app = typer.Typer(help="Employee management commands")
 @app.command()
 def add(
     name: str = typer.Option(..., "--name", help="Employee full name"),
-    salary: float = typer.Option(..., "--salary", help="Monthly salary amount"),
+    salary: str = typer.Option(..., "--salary", help="Monthly salary amount", callback=decimal_amount),
     currency: str = typer.Option("SGD", "--currency", help="Salary currency code"),
     start_date: str = typer.Option(..., "--start-date", help="Employment start date (YYYY-MM-DD)"),
     pass_type: str = typer.Option("EP", "--pass-type", help="Work pass type (EP, SP, WP, PR, Citizen)"),
@@ -21,7 +22,7 @@ def add(
         "/api/employees",
         json_data={
             "name": name,
-            "base_salary": str(salary),
+            "base_salary": salary,
             "salary_currency": currency,
             "start_date": start_date,
             "work_pass_type": pass_type,

@@ -154,9 +154,21 @@ acct invoice edit INVOICE_ID [--description TEXT] [--due-date YYYY-MM-DD]
 ### `acct invoice issue`
 
 Issue a draft invoice. Assigns invoice number and generates PDF.
+When [ledger accounts](#ledger--stablecoin-receipts) are set, it also posts the receivable
+journal entry (Dr Receivable / Cr Revenue, + GST output).
 
 ```bash
-acct invoice issue INVOICE_ID
+acct invoice issue INVOICE_ID [--fx-rate SGD_PER_UNIT]
+```
+
+`--fx-rate` is only for non-SGD invoices; without it, today's Airwallex rate is used.
+
+### `acct invoice post-journal`
+
+Post the receivable journal entry for an invoice that was issued before ledger accounts were set.
+
+```bash
+acct invoice post-journal INVOICE_ID [--fx-rate SGD_PER_UNIT_ON_ISSUE_DATE]
 ```
 
 ### `acct invoice mark-paid`
@@ -401,14 +413,28 @@ acct payment record \
   --date 2026-03-20 \
   --reference TXN20260320
 
-# Crypto payment
+# Crypto payment (record only — no journal entry; prefer `acct payment receive-crypto`)
 acct payment record \
   --type crypto \
   --entity invoice:abc123 \
   --amount 3750 \
-  --currency USD \
+  --currency USDC \
   --tx-hash 0xabc... \
   --chain ethereum
+```
+
+Amounts are exact decimals (sent as strings, never floats), e.g. `--amount 1234.567891`.
+
+### `acct payment receive-crypto`
+
+Record a **verified** stablecoin receipt for an issued invoice in one step: the payment,
+the receipt journal entry (with FX gain/loss), and the invoice marked paid.
+See [Ledger & Stablecoin Receipts](#ledger--stablecoin-receipts).
+
+```bash
+acct payment receive-crypto --invoice INVOICE_ID --account WALLET_ACCOUNT_ID \
+  --amount 3750 [--currency USDC|USDT] [--tx-hash 0x...] [--chain base] \
+  [--date YYYY-MM-DD] [--fx-rate SGD_PER_COIN] [--notes TEXT]
 ```
 
 ### `acct payment allocate`
@@ -640,6 +666,54 @@ acct report trial-balance [--date YYYY-MM-DD] [--include-unconfirmed]
 acct report trial-balance --date 2026-03-31
 acct report trial-balance --date 2026-03-31 --include-unconfirmed
 ```
+
+---
+
+## Ledger & Stablecoin Receipts
+
+The ledger is **accrual-based** with SGD as functional currency. Every journal line keeps
+its native amount and `fx_rate_to_sgd`, so a USDC wallet carries both its coin quantity and
+its SGD cost. Posting is opt-in: nothing changes until ledger accounts are set.
+
+### `acct ledger set` / `acct ledger show`
+
+```bash
+acct ledger set \
+  --receivable SGD=<receivable-sgd-id> --receivable USD=<receivable-usd-id> \
+  --revenue <revenue-sgd-id> \
+  --gst-output <gst-output-sgd-id> \
+  --fx-gain-loss <fx-gain-loss-sgd-id>
+acct ledger show
+```
+
+| Mapping | Account requirements |
+|---------|----------------------|
+| `--receivable CCY=` | currency `CCY`, class `asset` (one per invoice currency) |
+| `--revenue` | SGD, class `revenue` |
+| `--gst-output` | SGD, class `liability` (needed once an invoice has GST) |
+| `--fx-gain-loss` | SGD, class `revenue` or `expense` |
+
+### Stablecoin invoice → Coinbase → Aspire
+
+1. **Issue the invoice in USD** (clients pay USDC/USDT 1:1):
+   `acct invoice issue INV_ID --fx-rate 1.2934`
+   → Dr Receivable-USD 3,750 @ 1.2934 / Cr Revenue SGD 4,850.25
+2. **Verify the receipt yourself** (amount, destination address, confirmations on the explorer
+   or in Coinbase) — the backoffice does not check the chain. Then:
+   `acct payment receive-crypto --invoice INV_ID --account <Coinbase USDC> --amount 3750 --tx-hash 0x... --chain base --fx-rate 1.30`
+   → Dr Coinbase USDC 3,750 @ 1.30 / Cr Receivable-USD @ 1.2934 / Cr FX gain SGD 24.75; invoice paid.
+   Keep holding USDC as long as you like.
+3. **Off-ramp later, in one go.** After the SGD lands in Aspire (synced as a bank transaction):
+   `acct fx record --sell-currency USDC --sell-amount 3750 --buy-currency SGD --buy-amount 4800 --sell-account <Coinbase USDC> --buy-account <Aspire SGD> --date 2026-11-20 --provider coinbase --bank-tx <aspire-deposit-tx-id>`
+   → Dr Aspire SGD 4,800 / Cr Coinbase USDC 3,750 at its carrying rate (1.30 = SGD 4,875) / Dr FX loss SGD 75.
+   The Aspire deposit is marked reconciled by the conversion, so do **not** `tx-reconcile` it again.
+
+Rates (`--fx-rate`, SGD per 1 unit): an explicit rate wins; otherwise today's Airwallex USD/SGD
+rate is fetched (USDC/USDT are valued as USD). Back-dated postings need an explicit rate.
+Coinbase fees are embedded in the SGD received and end up in FX gain/loss.
+
+Limits: receipts must equal the invoice total (no partial or over-payments); cancelling an
+issued invoice posts a reversing entry; bank fees on deposits are booked manually.
 
 ---
 
@@ -876,8 +950,13 @@ acct bank tx-list [--status unmatched|matched|ignored]
 Reconcile a bank transaction by creating a journal entry automatically (debit/credit based on deposit/withdrawal).
 
 ```bash
-acct bank tx-reconcile TX_ID --bank-account ACCOUNT_ID --contra-account ACCOUNT_ID [--description TEXT] [--no-confirm]
+acct bank tx-reconcile TX_ID --bank-account ACCOUNT_ID [--contra-account ACCOUNT_ID] [--description TEXT] [--no-confirm] [--fx-rate RATE]
 ```
+
+`--contra-account` is required, except for a deposit matched to a payment for an invoice whose
+receivable was posted at issue: that deposit settles the receivable (contra = receivable account;
+passing revenue is rejected because revenue was already booked at issue). The deposit must equal
+the invoice total; differences such as bank fees are booked manually with `acct journal create`.
 
 ```bash
 acct bank tx-reconcile tx-abc123 \

@@ -2,6 +2,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_get, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -11,17 +12,26 @@ app = typer.Typer(help="FX conversion recording commands")
 @app.command()
 def record(
     sell_currency: str = typer.Option(..., "--sell-currency", help="Currency to sell (e.g. SGD)"),
-    sell_amount: float = typer.Option(..., "--sell-amount", help="Amount to sell"),
+    sell_amount: str = typer.Option(..., "--sell-amount", help="Amount to sell", callback=decimal_amount),
     buy_currency: str = typer.Option(..., "--buy-currency", help="Currency to buy (e.g. USD)"),
-    buy_amount: float = typer.Option(..., "--buy-amount", help="Amount to buy"),
+    buy_amount: str = typer.Option(..., "--buy-amount", help="Amount to buy", callback=decimal_amount),
     sell_account: str = typer.Option(..., "--sell-account", help="Sell account ID"),
     buy_account: str = typer.Option(..., "--buy-account", help="Buy account ID"),
     date: str = typer.Option(..., "--date", help="Conversion date (YYYY-MM-DD)"),
     provider: Optional[str] = typer.Option(None, "--provider", help="FX provider (e.g. airwallex, dbs)"),
     reference: Optional[str] = typer.Option(None, "--reference", help="Provider reference number"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Additional notes"),
+    bank_tx: Optional[str] = typer.Option(
+        None, "--bank-tx",
+        help="Bank transaction ID of the deposit the bought currency landed as (e.g. the synced Aspire SGD "
+        "deposit); it is reconciled by this conversion so it is not booked twice",
+    ),
 ) -> None:
-    """Record an FX conversion. Auto-creates a balanced journal entry."""
+    """Record an FX conversion. Auto-creates a balanced journal entry.
+
+    Selling a foreign currency/stablecoin for SGD books realised FX gain/loss against
+    the sold account's carrying rate (when an FX gain/loss account is set in `acct ledger`).
+    """
     payload: dict = {
         "conversion_date": date,
         "sell_currency": sell_currency,
@@ -37,6 +47,8 @@ def record(
         payload["reference"] = reference
     if notes:
         payload["notes"] = notes
+    if bank_tx:
+        payload["bank_transaction_id"] = bank_tx
 
     data = api_post("/api/fx-conversions", json_data=payload)
     print_success(f"FX conversion recorded: {data['id']}")

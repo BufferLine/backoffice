@@ -81,6 +81,10 @@ class Invoice(Base):
         UUID(as_uuid=True), ForeignKey("payment_methods.id", ondelete="SET NULL"), nullable=True
     )
     idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Accounts-receivable journal entry posted at issue (None when no ledger mapping).
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True
+    )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )

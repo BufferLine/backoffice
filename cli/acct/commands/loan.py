@@ -2,6 +2,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_download, api_get, api_patch, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -13,10 +14,10 @@ def create(
     loan_type: str = typer.Option(..., "--type", help="Loan type: shareholder_loan, director_loan, intercompany_loan, third_party_loan"),
     direction: str = typer.Option(..., "--direction", help="Direction: inbound (company borrows) or outbound (company lends)"),
     counterparty: str = typer.Option(..., "--counterparty", help="Counterparty name"),
-    principal: float = typer.Option(..., "--principal", help="Principal amount"),
+    principal: str = typer.Option(..., "--principal", help="Principal amount", callback=decimal_amount),
     start_date: str = typer.Option(..., "--start-date", help="Start date (YYYY-MM-DD)"),
     currency: str = typer.Option("SGD", "--currency", help="Currency code"),
-    interest_rate: Optional[float] = typer.Option(None, "--interest-rate", help="Annual interest rate (e.g. 0.05 for 5%)"),
+    interest_rate: Optional[str] = typer.Option(None, "--interest-rate", help="Annual interest rate (e.g. 0.05 for 5%)", callback=decimal_amount),
     interest_type: str = typer.Option("simple", "--interest-type", help="Interest type: simple or compound"),
     maturity_date: Optional[str] = typer.Option(None, "--maturity-date", help="Maturity date (YYYY-MM-DD)"),
     description: Optional[str] = typer.Option(None, "--description", help="Loan description"),
@@ -86,8 +87,8 @@ def show(
 def edit(
     loan_id: str = typer.Argument(..., help="Loan ID"),
     counterparty: Optional[str] = typer.Option(None, "--counterparty", help="Counterparty name"),
-    principal: Optional[float] = typer.Option(None, "--principal", help="Principal amount"),
-    interest_rate: Optional[float] = typer.Option(None, "--interest-rate", help="Annual interest rate"),
+    principal: Optional[str] = typer.Option(None, "--principal", help="Principal amount", callback=decimal_amount),
+    interest_rate: Optional[str] = typer.Option(None, "--interest-rate", help="Annual interest rate", callback=decimal_amount),
     interest_type: Optional[str] = typer.Option(None, "--interest-type", help="Interest type: simple or compound"),
     start_date: Optional[str] = typer.Option(None, "--start-date", help="Start date (YYYY-MM-DD)"),
     maturity_date: Optional[str] = typer.Option(None, "--maturity-date", help="Maturity date (YYYY-MM-DD)"),

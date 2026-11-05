@@ -29,6 +29,7 @@ Pure logic tests with no database or server dependency.
 | `test_paynow_qr.py` | 20 | SGQR EMVCo TLV payload generation |
 | `test_airwallex.py` | 11 | Airwallex provider capabilities + FX/payment link |
 | `test_aspire.py` | 29 | Aspire provider auth, transaction/balance mapping, minor units |
+| `test_ledger.py` | 22 | Accrual postings: invoice issue, crypto receipt FX diff, rate resolution |
 | `test_loans.py` | 41 | Loan state machine, interest calculation, repayment logic |
 | `test_loan_service.py` | 2 | Loan service edge cases |
 | `test_journal_schema.py` | 15 | Journal entry validation, multi-debit/credit |
@@ -152,6 +153,9 @@ class TestInvoiceStateMachine:
 ### What NOT to Unit Test
 
 - Database queries → integration tests (`backend/tests/test_*.py`)
+  - `test_crypto_ledger.py` covers the stablecoin flow end to end: ledger mapping, USD invoice
+    receivable, USDC receipt with FX gain, off-ramp conversion with FX loss and deposit reconciliation,
+    bank-paid invoice settlement, cancellation reversal, and journal backfill.
 - API endpoints with DB → integration tests, or E2E for multi-step workflows
 - External API calls → mock them
 

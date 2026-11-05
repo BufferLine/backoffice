@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -11,6 +11,14 @@ from app.database import Base
 
 class FxConversion(Base):
     __tablename__ = "fx_conversions"
+    __table_args__ = (
+        Index(
+            "uq_fx_conversions_bank_transaction_id_not_null",
+            "bank_transaction_id",
+            unique=True,
+            postgresql_where=text("bank_transaction_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversion_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -31,6 +39,9 @@ class FxConversion(Base):
     )
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True
+    )
+    bank_transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("bank_transactions.id", ondelete="SET NULL"), nullable=True
     )
     provider: Mapped[str | None] = mapped_column(String(100), nullable=True)
     reference: Mapped[str | None] = mapped_column(String(255), nullable=True)

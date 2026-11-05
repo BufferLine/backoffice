@@ -115,6 +115,7 @@ class InvoiceResponse(BaseModel):
     wallet_address: Optional[str]
     payment_method_id: Optional[UUID]
     payment_method_ids: list[UUID] = []
+    journal_entry_id: Optional[UUID] = None
     line_items: list[LineItemResponse] = []
     created_at: datetime
     updated_at: datetime
@@ -130,6 +131,12 @@ class InvoiceListResponse(BaseModel):
 # Mark paid request
 class MarkPaidRequest(BaseModel):
     payment_id: UUID
+
+
+class IssueInvoiceRequest(BaseModel):
+    # SGD per 1 unit of the invoice currency; only needed for non-SGD invoices
+    # when the rate cannot be fetched (e.g. Airwallex not configured).
+    fx_rate_to_sgd: Optional[Decimal] = None
 
 
 # Recurring invoice schemas

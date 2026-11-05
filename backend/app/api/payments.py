@@ -9,6 +9,7 @@ from app.api.deps import AuthenticatedUser, require_permission
 from app.database import get_db
 from app.models.file import File
 from app.schemas.payment import (
+    CryptoReceiptCreate,
     PaymentCreate,
     PaymentLinkRequest,
     PaymentListResponse,
@@ -23,6 +24,7 @@ from app.schemas.payment_allocation import (
     AllocationResponse,
 )
 from app.services import payment as payment_svc
+from app.state_machines import InvalidTransitionError
 from app.services import payment_allocation as allocation_svc
 
 router = APIRouter()
@@ -71,6 +73,39 @@ async def record_payment(
         payment = await payment_svc.record_payment(db, data, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    return PaymentResponse.model_validate(payment)
+
+
+@router.post("/receive-crypto", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
+async def receive_crypto(
+    data: CryptoReceiptCreate,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PaymentResponse:
+    """Record a verified stablecoin/crypto receipt: payment + receipt journal + invoice paid."""
+    from app.services import ledger
+
+    try:
+        payment = await ledger.receive_crypto_payment(
+            db,
+            invoice_id=data.invoice_id,
+            wallet_account_id=data.wallet_account_id,
+            amount=data.amount,
+            currency=data.currency,
+            actor_id=current_user.id,
+            tx_hash=data.tx_hash,
+            chain_id=data.chain_id,
+            payment_date=data.payment_date,
+            fx_rate_to_sgd=data.fx_rate_to_sgd,
+            notes=data.notes,
+        )
+    except InvalidTransitionError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except ValueError as e:
+        detail = str(e)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     return PaymentResponse.model_validate(payment)
 
 

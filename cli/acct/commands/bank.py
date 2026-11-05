@@ -3,6 +3,7 @@ from typing import Optional
 
 import typer
 
+from acct.amounts import decimal_amount
 from acct.api_client import api_get, api_post
 from acct.formatters import print_json, print_success, print_table
 
@@ -82,20 +83,27 @@ def tx_auto_match() -> None:
 def tx_reconcile(
     tx_id: str = typer.Argument(..., help="Bank transaction ID"),
     bank_account: str = typer.Option(..., "--bank-account", help="Bank account ID (asset)"),
-    contra_account: str = typer.Option(..., "--contra-account", help="Contra account ID (expense/revenue/etc)"),
+    contra_account: Optional[str] = typer.Option(
+        None, "--contra-account",
+        help="Contra account ID (expense/revenue/etc). Omit for a deposit matched to an invoice payment: "
+        "it settles the invoice receivable",
+    ),
     description: Optional[str] = typer.Option(None, "--description", help="Journal entry description"),
     no_confirm: bool = typer.Option(False, "--no-confirm", help="Create as unconfirmed"),
+    fx_rate: Optional[str] = typer.Option(
+        None, "--fx-rate", help="SGD per 1 unit, for a foreign-currency invoice settlement", callback=decimal_amount,
+    ),
 ) -> None:
     """Reconcile a bank transaction by creating a journal entry."""
-    data = api_post(
-        f"/api/bank-transactions/{tx_id}/reconcile",
-        json_data={
-            "bank_account_id": bank_account,
-            "contra_account_id": contra_account,
-            "description": description,
-            "auto_confirm": not no_confirm,
-        },
-    )
+    payload: dict = {
+        "bank_account_id": bank_account,
+        "contra_account_id": contra_account,
+        "description": description,
+        "auto_confirm": not no_confirm,
+    }
+    if fx_rate:
+        payload["fx_rate_to_sgd"] = fx_rate
+    data = api_post(f"/api/bank-transactions/{tx_id}/reconcile", json_data=payload)
     print_success(f"Transaction {tx_id} reconciled")
     print_json(data)
 
