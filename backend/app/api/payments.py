@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.file import File
 from app.schemas.payment import (
     CryptoReceiptCreate,
+    OnchainVerifyRequest,
     PaymentCreate,
     PaymentLinkRequest,
     PaymentListResponse,
@@ -24,6 +25,7 @@ from app.schemas.payment_allocation import (
     AllocationResponse,
 )
 from app.services import payment as payment_svc
+from app.services.onchain import OnchainRPCError, OnchainVerificationError
 from app.state_machines import InvalidTransitionError
 from app.services import payment_allocation as allocation_svc
 
@@ -85,6 +87,12 @@ async def receive_crypto(
     """Record a verified stablecoin/crypto receipt: payment + receipt journal + invoice paid."""
     from app.services import ledger
 
+    if data.skip_verification and "payment:skip_verification" not in current_user.permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Skipping on-chain verification requires the payment:skip_verification permission",
+        )
+
     try:
         payment = await ledger.receive_crypto_payment(
             db,
@@ -98,7 +106,13 @@ async def receive_crypto(
             payment_date=data.payment_date,
             fx_rate_to_sgd=data.fx_rate_to_sgd,
             notes=data.notes,
+            skip_verification=data.skip_verification,
+            skip_reason=data.skip_reason,
         )
+    except OnchainRPCError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+    except OnchainVerificationError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except InvalidTransitionError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
@@ -107,6 +121,41 @@ async def receive_crypto(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     return PaymentResponse.model_validate(payment)
+
+
+@router.post("/verify-onchain")
+async def verify_onchain(
+    data: OnchainVerifyRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:read"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Read-only check of a stablecoin transfer on-chain (records nothing)."""
+    from sqlalchemy import select
+
+    from app.models.account import Account
+    from app.services import onchain
+
+    to_address = data.to_address
+    if data.wallet_account_id is not None:
+        account = (await db.execute(select(Account).where(Account.id == data.wallet_account_id))).scalar_one_or_none()
+        if account is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet account not found")
+        to_address = account.wallet_address
+    if not to_address:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Pass to_address or a wallet_account_id whose wallet_address is set",
+        )
+    try:
+        result = await onchain.verify_stablecoin_transfer(
+            chain=data.chain, tx_hash=data.tx_hash, currency=data.currency,
+            to_address=to_address, expected_amount=data.expected_amount,
+        )
+    except OnchainRPCError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+    except OnchainVerificationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    return result.to_json()
 
 
 @router.get("", response_model=PaymentListResponse)

@@ -56,10 +56,11 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] Historical FX rates (MAS) for back-dated postings
 
 #### Crypto On-chain Verification
-- [ ] Verify `tx_hash` via Etherscan/Polygonscan API after payment recording
-- [ ] Check: transaction exists, amount matches, destination matches, N confirmations
-- [ ] Store verification status on payment record
-- [ ] Support multiple chains via `chain_id` field (Ethereum, Polygon, Arbitrum)
+- [x] Verify `tx_hash` via JSON-RPC before recording (`receive-crypto`; no API key, RPC URLs configurable)
+- [x] Check: transaction succeeded, canonical token contract, destination matches, exact amount, N confirmations
+- [x] Store verification result on payment record (`payments.onchain_verification`)
+- [x] Chains: Ethereum (USDC, USDT), Base (USDC)
+- [ ] More chains (Polygon, Arbitrum, Solana, Tron)
 
 ### Phase 2 — Bank API Sync (Medium effort, high value)
 

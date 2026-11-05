@@ -20,7 +20,15 @@ async def create_account(
     current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AccountResponse:
-    account = await account_svc.create_account(db, data, created_by=current_user.id)
+    if (data.wallet_address or data.chain_id) and "payment:manage_wallets" not in current_user.permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Setting a wallet address requires the payment:manage_wallets permission",
+        )
+    try:
+        account = await account_svc.create_account(db, data, created_by=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     return AccountResponse.model_validate(account)
 
 
@@ -59,10 +67,17 @@ async def update_account(
     current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AccountResponse:
+    changes = data.model_dump(exclude_unset=True)
+    if {"wallet_address", "chain_id"} & changes.keys() and "payment:manage_wallets" not in current_user.permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Changing a wallet address requires the payment:manage_wallets permission",
+        )
     try:
-        account = await account_svc.update_account(db, account_id, data)
+        account = await account_svc.update_account(db, account_id, data, actor_id=current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        code = status.HTTP_404_NOT_FOUND if "not found" in str(e).lower() else status.HTTP_409_CONFLICT
+        raise HTTPException(status_code=code, detail=str(e))
     return AccountResponse.model_validate(account)
 
 

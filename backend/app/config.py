@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str | None = None
     WISE_API_TOKEN: str | None = None
     ETHERSCAN_API_KEY: str | None = None
+    # On-chain verification of stablecoin receipts (JSON-RPC; public endpoints by default).
+    ONCHAIN_RPC_ETHEREUM: str = "https://ethereum-rpc.publicnode.com"
+    ONCHAIN_RPC_BASE: str = "https://mainnet.base.org"
+    ONCHAIN_MIN_CONFIRMATIONS_ETHEREUM: int = 12
+    ONCHAIN_MIN_CONFIRMATIONS_BASE: int = 30
 
 
     @model_validator(mode="after")

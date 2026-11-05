@@ -558,41 +558,119 @@ async def receive_crypto_payment(
     payment_date: Optional[date] = None,
     fx_rate_to_sgd: Optional[Decimal] = None,
     notes: Optional[str] = None,
+    skip_verification: bool = False,
+    skip_reason: Optional[str] = None,
 ) -> Payment:
     """Record a stablecoin/crypto receipt for an issued invoice in one step.
 
-    Records the payment, posts the receipt journal entry, and marks the invoice paid.
-    The caller (person or agent) is responsible for having verified the on-chain amount.
+    Verifies the transfer on-chain (canonical token contract, recipient = the wallet
+    account's address, exact amount, confirmations), then records the payment, posts the
+    receipt journal entry, and marks the invoice paid. Verification can only be skipped
+    explicitly with a reason, which is stored on the payment and in the audit log.
     """
     from app.services import invoice as invoice_service
+    from app.services import onchain
     from app.services import payment as payment_service
 
     currency = currency.upper()
+    if skip_verification:
+        reason = (skip_reason or "").strip()
+        if len(reason) < 15:
+            raise ValueError("skip_reason must explain why on-chain verification is skipped (at least 15 characters)")
+        tx_hash = onchain.canonical_tx_hash(tx_hash) if tx_hash else None
+        chain_id = chain_id.strip().lower() if chain_id else None
+    else:
+        chain_id = onchain.normalize_chain(chain_id)
+        tx_hash = onchain.normalize_tx_hash(tx_hash)
+
     invoice = await invoice_service.get_invoice(db, invoice_id)
     if invoice is None:
         raise ValueError(f"Invoice {invoice_id} not found")
-    await lock_invoice(db, invoice_id)  # serialise concurrent receipts for this invoice
-    if invoice.status != "issued":
-        raise ValueError(f"Invoice must be 'issued' to receive payment, current: {invoice.status}")
-    if not settles_in(currency, invoice.currency):
-        raise ValueError(f"A {currency} payment cannot settle a {invoice.currency} invoice")
 
-    total = Decimal(str(invoice.total_amount))
-    if amount != total:
-        raise ValueError(
-            f"Received amount {currency} {amount} does not equal invoice total {invoice.currency} {total}; "
-            "partial and over-payments are not supported"
+    async def precheck() -> None:
+        """Checks repeated after taking the row lock (state may change during the RPC call)."""
+        if invoice.status != "issued":
+            raise ValueError(f"Invoice must be 'issued' to receive payment, current: {invoice.status}")
+        if not settles_in(currency, invoice.currency):
+            raise ValueError(f"A {currency} payment cannot settle a {invoice.currency} invoice")
+        total = Decimal(str(invoice.total_amount))
+        if amount != total:
+            raise ValueError(
+                f"Received amount {currency} {amount} does not equal invoice total {invoice.currency} {total}; "
+                "partial and over-payments are not supported"
+            )
+        if tx_hash:
+            duplicate = (
+                await db.execute(select(Payment.id).where(func.lower(Payment.tx_hash) == tx_hash.lower()))
+            ).first()
+            if duplicate is not None:
+                raise ValueError(f"Duplicate tx_hash: {tx_hash} is already recorded")
+        if await receivable_settled(db, invoice.id):
+            raise ValueError(f"Invoice {invoice.invoice_number} receivable is already settled")
+
+    await precheck()
+    wallet = await _require_account(db, wallet_account_id, "Wallet", currency=currency)
+
+    if skip_verification:
+        verification = {"skipped": True, "reason": reason, "chain": chain_id}
+    else:
+        if not wallet.wallet_address:
+            raise ValueError(
+                f"Wallet account {wallet.name} has no wallet_address to verify against; "
+                f"an admin can set it with `acct account update {wallet.id} --wallet-address 0x...`"
+            )
+        if wallet.chain_id:
+            try:
+                wallet_chain = onchain.normalize_chain(wallet.chain_id)
+            except onchain.OnchainVerificationError:
+                wallet_chain = wallet.chain_id
+            if wallet_chain != chain_id:
+                raise onchain.OnchainVerificationError(
+                    f"Wallet account {wallet.name} is on {wallet.chain_id}, but the transfer is on {chain_id}"
+                )
+        # Query the chain before taking the invoice row lock (RPC can take seconds).
+        result = await onchain.verify_stablecoin_transfer(
+            chain=chain_id, tx_hash=tx_hash, currency=currency, to_address=wallet.wallet_address,
+            expected_amount=amount,
         )
+        if result.verified and result.block_timestamp is not None and invoice.issue_date is not None:
+            if result.block_timestamp.astimezone(_LOCAL_TZ).date() < invoice.issue_date:
+                result.problems.append(
+                    f"transfer ({result.block_timestamp.astimezone(_LOCAL_TZ).date()}) predates the invoice "
+                    f"issue date ({invoice.issue_date})"
+                )
+        if result.verified:
+            own = {
+                (addr or "").lower()
+                for (addr,) in (
+                    await db.execute(select(Account.wallet_address).where(Account.wallet_address.is_not(None)))
+                ).all()
+            }
+            internal = sorted(own & set(result.from_addresses))
+            if internal:
+                result.problems.append(f"sent from our own wallet {', '.join(internal)} (internal transfer)")
+        result.verified = not result.problems
+        if not result.verified:
+            logger.warning(
+                "On-chain verification failed for invoice %s tx %s on %s: %s",
+                invoice.invoice_number, tx_hash, chain_id, "; ".join(result.problems),
+            )
+            raise onchain.OnchainVerificationError(
+                "On-chain verification failed: " + "; ".join(result.problems) + f" ({result.explorer_url})",
+                result,
+            )
+        verification = result.to_json()
+        if payment_date is None and result.block_timestamp is not None:
+            payment_date = result.block_timestamp.astimezone(_LOCAL_TZ).date()
 
-    await _require_account(db, wallet_account_id, "Wallet", currency=currency)
+    await lock_invoice(db, invoice_id)  # serialise concurrent receipts for this invoice
+    await precheck()
 
     mapping = await get_ledger_accounts(db)
     if not mapping.configured:
         raise ValueError("Ledger accounts are not configured; run `acct ledger set` first")
     ar_line = await receivable_line(db, invoice)
     receivable_id = ar_line.account_id
-    if await receivable_settled(db, invoice.id):
-        raise ValueError(f"Invoice {invoice.invoice_number} receivable is already settled")
 
     paid_on = payment_date or today_local()
     quote = await resolve_fx_rate_to_sgd(currency, paid_on, fx_rate_to_sgd)
@@ -645,7 +723,16 @@ async def receive_crypto_payment(
         created_by=actor_id,
     )
     payment.journal_entry_id = entry.id
+    payment.onchain_verification = verification
     await db.flush()
+
+    await AuditService(db).log(
+        action="payment.onchain_verification_skipped" if skip_verification else "payment.onchain_verified",
+        entity_type="payment",
+        entity_id=payment.id,
+        actor_id=actor_id,
+        output_data=verification,
+    )
 
     await invoice_service.mark_paid(db=db, invoice=invoice, payment_id=payment.id, user_id=actor_id)
     return payment

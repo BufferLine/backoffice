@@ -10,11 +10,24 @@ from app.models.journal import JournalEntry, JournalLine
 from app.schemas.account import AccountBalanceResponse, AccountCreate, AccountUpdate
 
 
+def _normalize_wallet_address(address: Optional[str]) -> Optional[str]:
+    """EVM addresses are validated and lower-cased; other formats are kept as given."""
+    if not address:
+        return address
+    address = address.strip()
+    if address.lower().startswith("0x"):
+        from app.services.onchain import normalize_address
+
+        return normalize_address(address)
+    return address
+
+
 async def create_account(
     db: AsyncSession,
     data: AccountCreate,
     created_by: Optional[uuid.UUID] = None,
 ) -> Account:
+    data = data.model_copy(update={"wallet_address": _normalize_wallet_address(data.wallet_address)})
     account = Account(
         name=data.name,
         account_type=data.account_type,
@@ -34,6 +47,16 @@ async def create_account(
     db.add(account)
     await db.flush()
     await db.refresh(account)
+    if account.wallet_address or account.chain_id:
+        from app.services.audit import AuditService
+
+        await AuditService(db).log(
+            action="account.wallet_set",
+            entity_type="account",
+            entity_id=account.id,
+            actor_id=created_by,
+            output_data={"wallet_address": account.wallet_address, "chain_id": account.chain_id},
+        )
     return account
 
 
@@ -49,12 +72,51 @@ async def update_account(
     db: AsyncSession,
     account_id: uuid.UUID,
     data: AccountUpdate,
+    actor_id: Optional[uuid.UUID] = None,
 ) -> Account:
     account = await get_account(db, account_id)
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    if "wallet_address" in changes:
+        changes["wallet_address"] = _normalize_wallet_address(changes["wallet_address"])
+
+    wallet_changes = {
+        k: v for k, v in changes.items() if k in ("wallet_address", "chain_id") and v != getattr(account, k)
+    }
+    if wallet_changes:
+        from app.models.payment import Payment
+
+        # The address is evidence for receipts already verified against it: never rewrite it.
+        used = (
+            await db.execute(
+                select(func.count(Payment.id)).where(
+                    Payment.onchain_verification["to_address"].astext == (account.wallet_address or "").lower(),
+                    Payment.onchain_verification["verified"].astext == "true",
+                )
+            )
+        ).scalar_one()
+        if used and account.wallet_address:
+            raise ValueError(
+                f"Account {account.name}'s wallet address is referenced by {used} verified receipt(s); "
+                "create a new wallet account instead of changing it"
+            )
+
+    before = {k: getattr(account, k) for k in wallet_changes}
+    for field, value in changes.items():
         setattr(account, field, value)
     await db.flush()
     await db.refresh(account)
+
+    if wallet_changes:
+        from app.services.audit import AuditService
+
+        await AuditService(db).log(
+            action="account.wallet_change",
+            entity_type="account",
+            entity_id=account.id,
+            actor_id=actor_id,
+            input_data=before,
+            output_data=wallet_changes,
+        )
     return account
 
 
