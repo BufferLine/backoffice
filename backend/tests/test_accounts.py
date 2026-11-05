@@ -1,5 +1,10 @@
 """
 E2E integration tests for account balance and transaction tracking.
+
+Account balance is derived from confirmed journal lines (double-entry), not
+from the legacy ``transactions`` table — see ``services.account.get_balance``.
+Balance tests therefore post journal entries against the bank account; the
+transaction tests only cover the legacy transaction lifecycle.
 """
 
 import pytest
@@ -9,6 +14,40 @@ _account_id: str = ""
 _tx_inflow_id: str = ""
 _tx_outflow_id: str = ""
 _commitment_id: str = ""
+_revenue_account_id: str = ""
+_expense_account_id: str = ""
+
+
+async def _post_journal_entry(
+    client: AsyncClient,
+    auth_headers: dict,
+    *,
+    debit_account: str,
+    credit_account: str,
+    amount: str,
+    entry_date: str,
+    is_confirmed: bool,
+) -> str:
+    resp = await client.post(
+        "/api/journal-entries",
+        json={
+            "entry_date": entry_date,
+            "is_confirmed": is_confirmed,
+            "lines": [
+                {"account_id": debit_account, "debit": amount, "currency": "SGD"},
+                {"account_id": credit_account, "credit": amount, "currency": "SGD"},
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, f"Create journal entry failed: {resp.status_code}: {resp.text}"
+    return resp.json()["id"]
+
+
+async def _balance(client: AsyncClient, auth_headers: dict) -> dict:
+    resp = await client.get(f"/api/accounts/{_account_id}/balance", headers=auth_headers)
+    assert resp.status_code == 200
+    return resp.json()
 
 
 @pytest.mark.asyncio
@@ -19,6 +58,7 @@ async def test_create_account(client: AsyncClient, auth_headers: dict):
         json={
             "name": "Test Bank Account",
             "account_type": "bank",
+            "account_class": "asset",
             "currency": "SGD",
             "institution": "DBS",
             "opening_balance": "1000.00",
@@ -33,6 +73,30 @@ async def test_create_account(client: AsyncClient, auth_headers: dict):
     assert body["currency"] == "SGD"
     assert float(body["opening_balance"]) == 1000.0
     _account_id = body["id"]
+
+
+@pytest.mark.asyncio
+async def test_create_counter_accounts(client: AsyncClient, auth_headers: dict):
+    """Revenue + expense accounts used as the other side of journal entries."""
+    global _revenue_account_id, _expense_account_id
+    for name, account_class in (("Test Revenue", "revenue"), ("Test Expense", "expense")):
+        resp = await client.post(
+            "/api/accounts",
+            json={
+                "name": name,
+                "account_type": "other",
+                "account_class": account_class,
+                "currency": "SGD",
+                "opening_balance": "0",
+                "opening_balance_date": "2026-01-01",
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201, f"Create {name} failed: {resp.status_code}: {resp.text}"
+        if account_class == "revenue":
+            _revenue_account_id = resp.json()["id"]
+        else:
+            _expense_account_id = resp.json()["id"]
 
 
 @pytest.mark.asyncio
@@ -69,7 +133,7 @@ async def test_get_account_balance_initial(client: AsyncClient, auth_headers: di
 
 @pytest.mark.asyncio
 async def test_create_inflow_transaction(client: AsyncClient, auth_headers: dict):
-    """Create a confirmed inflow — balance should increase."""
+    """Create a confirmed legacy inflow transaction."""
     global _tx_inflow_id
     resp = await client.post(
         "/api/transactions",
@@ -90,22 +154,13 @@ async def test_create_inflow_transaction(client: AsyncClient, auth_headers: dict
     assert body["direction"] == "in"
     assert float(body["amount"]) == 500.0
     assert body["status"] == "confirmed"
+    assert body["confirmed_at"] is not None
     _tx_inflow_id = body["id"]
 
 
 @pytest.mark.asyncio
-async def test_balance_after_inflow(client: AsyncClient, auth_headers: dict):
-    """Balance = opening(1000) + confirmed_in(500) = 1500."""
-    resp = await client.get(f"/api/accounts/{_account_id}/balance", headers=auth_headers)
-    assert resp.status_code == 200
-    body = resp.json()
-    assert float(body["confirmed_inflows"]) == 500.0
-    assert float(body["current_balance"]) == 1500.0
-
-
-@pytest.mark.asyncio
 async def test_create_outflow_transaction(client: AsyncClient, auth_headers: dict):
-    """Create a confirmed outflow — balance should decrease."""
+    """Create a confirmed legacy outflow transaction."""
     global _tx_outflow_id
     resp = await client.post(
         "/api/transactions",
@@ -127,18 +182,7 @@ async def test_create_outflow_transaction(client: AsyncClient, auth_headers: dic
 
 
 @pytest.mark.asyncio
-async def test_balance_after_outflow(client: AsyncClient, auth_headers: dict):
-    """Balance = opening(1000) + confirmed_in(500) - confirmed_out(200) = 1300."""
-    resp = await client.get(f"/api/accounts/{_account_id}/balance", headers=auth_headers)
-    assert resp.status_code == 200
-    body = resp.json()
-    assert float(body["confirmed_outflows"]) == 200.0
-    assert float(body["current_balance"]) == 1300.0
-
-
-@pytest.mark.asyncio
-async def test_pending_transaction_does_not_affect_balance(client: AsyncClient, auth_headers: dict):
-    """A pending transaction should NOT affect the confirmed balance."""
+async def test_cancel_pending_transaction(client: AsyncClient, auth_headers: dict):
     resp = await client.post(
         "/api/transactions",
         json={
@@ -153,22 +197,16 @@ async def test_pending_transaction_does_not_affect_balance(client: AsyncClient, 
         headers=auth_headers,
     )
     assert resp.status_code == 201
+    assert resp.json()["status"] == "pending"
     pending_id = resp.json()["id"]
 
-    balance_resp = await client.get(f"/api/accounts/{_account_id}/balance", headers=auth_headers)
-    body = balance_resp.json()
-    # Balance unchanged — pending does not count
-    assert float(body["current_balance"]) == 1300.0
-
-    # Cancel it so it doesn't interfere with later tests
     cancel_resp = await client.post(f"/api/transactions/{pending_id}/cancel", headers=auth_headers)
     assert cancel_resp.status_code == 200
+    assert cancel_resp.json()["status"] == "cancelled"
 
 
 @pytest.mark.asyncio
-async def test_confirm_pending_transaction_affects_balance(client: AsyncClient, auth_headers: dict):
-    """Confirm a pending transaction — balance should now include it."""
-    # Create pending inflow
+async def test_confirm_pending_transaction(client: AsyncClient, auth_headers: dict):
     resp = await client.post(
         "/api/transactions",
         json={
@@ -185,18 +223,70 @@ async def test_confirm_pending_transaction_affects_balance(client: AsyncClient, 
     assert resp.status_code == 201
     pending_id = resp.json()["id"]
 
-    # Balance still 1300 before confirm
-    balance_before = await client.get(f"/api/accounts/{_account_id}/balance", headers=auth_headers)
-    assert float(balance_before.json()["current_balance"]) == 1300.0
-
-    # Confirm it
     confirm_resp = await client.post(f"/api/transactions/{pending_id}/confirm", headers=auth_headers)
     assert confirm_resp.status_code == 200
     assert confirm_resp.json()["status"] == "confirmed"
+    assert confirm_resp.json()["confirmed_at"] is not None
 
-    # Balance now 1400
-    balance_after = await client.get(f"/api/accounts/{_account_id}/balance", headers=auth_headers)
-    assert float(balance_after.json()["current_balance"]) == 1400.0
+
+@pytest.mark.asyncio
+async def test_balance_after_inflow(client: AsyncClient, auth_headers: dict):
+    """Dr bank / Cr revenue 500 → balance = opening(1000) + 500 = 1500."""
+    await _post_journal_entry(
+        client, auth_headers,
+        debit_account=_account_id, credit_account=_revenue_account_id,
+        amount="500.00", entry_date="2026-03-01", is_confirmed=True,
+    )
+    body = await _balance(client, auth_headers)
+    assert float(body["confirmed_inflows"]) == 500.0
+    assert float(body["confirmed_outflows"]) == 0.0
+    assert float(body["current_balance"]) == 1500.0
+
+
+@pytest.mark.asyncio
+async def test_balance_after_outflow(client: AsyncClient, auth_headers: dict):
+    """Dr expense / Cr bank 200 → balance = 1000 + 500 - 200 = 1300."""
+    await _post_journal_entry(
+        client, auth_headers,
+        debit_account=_expense_account_id, credit_account=_account_id,
+        amount="200.00", entry_date="2026-03-05", is_confirmed=True,
+    )
+    body = await _balance(client, auth_headers)
+    assert float(body["confirmed_outflows"]) == 200.0
+    assert float(body["current_balance"]) == 1300.0
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_journal_entry_does_not_affect_balance(client: AsyncClient, auth_headers: dict):
+    """A draft (unconfirmed) journal entry must NOT affect the balance."""
+    entry_id = await _post_journal_entry(
+        client, auth_headers,
+        debit_account=_account_id, credit_account=_revenue_account_id,
+        amount="9999.00", entry_date="2026-03-10", is_confirmed=False,
+    )
+    body = await _balance(client, auth_headers)
+    assert float(body["current_balance"]) == 1300.0
+
+    # Delete it so it doesn't interfere with later tests
+    delete_resp = await client.delete(f"/api/journal-entries/{entry_id}", headers=auth_headers)
+    assert delete_resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_confirm_journal_entry_affects_balance(client: AsyncClient, auth_headers: dict):
+    """Confirming a draft journal entry brings it into the balance."""
+    entry_id = await _post_journal_entry(
+        client, auth_headers,
+        debit_account=_account_id, credit_account=_revenue_account_id,
+        amount="100.00", entry_date="2026-03-15", is_confirmed=False,
+    )
+    assert float((await _balance(client, auth_headers))["current_balance"]) == 1300.0
+
+    confirm_resp = await client.post(f"/api/journal-entries/{entry_id}/confirm", headers=auth_headers)
+    assert confirm_resp.status_code == 200
+    assert confirm_resp.json()["is_confirmed"] is True
+
+    assert float((await _balance(client, auth_headers))["current_balance"]) == 1400.0
 
 
 @pytest.mark.asyncio
@@ -293,13 +383,8 @@ async def test_generate_pending_idempotent(client: AsyncClient, auth_headers: di
 
 
 @pytest.mark.asyncio
-async def test_confirm_commitment_transaction_affects_balance(client: AsyncClient, auth_headers: dict):
-    """Confirm the generated pending tx and verify balance decreases."""
-    # Get current balance
-    balance_before_resp = await client.get(f"/api/accounts/{_account_id}/balance", headers=auth_headers)
-    balance_before = float(balance_before_resp.json()["current_balance"])
-
-    # Find the pending tx for this commitment in 2026-04
+async def test_confirm_commitment_transaction(client: AsyncClient, auth_headers: dict):
+    """Confirm the pending transaction generated by the recurring commitment."""
     txs_resp = await client.get(
         f"/api/accounts/{_account_id}/transactions",
         params={"tx_status": "pending"},
@@ -308,14 +393,24 @@ async def test_confirm_commitment_transaction_affects_balance(client: AsyncClien
     pending_txs = [t for t in txs_resp.json()["items"] if t["recurring_commitment_id"] == _commitment_id]
     assert len(pending_txs) >= 1
     tx_id = pending_txs[0]["id"]
+    assert pending_txs[0]["direction"] == "out"
+    assert float(pending_txs[0]["amount"]) == 3000.0
 
-    # Confirm it
     confirm_resp = await client.post(f"/api/transactions/{tx_id}/confirm", headers=auth_headers)
     assert confirm_resp.status_code == 200
+    assert confirm_resp.json()["status"] == "confirmed"
 
-    # Balance should decrease by 3000 (outflow)
-    balance_after_resp = await client.get(f"/api/accounts/{_account_id}/balance", headers=auth_headers)
-    balance_after = float(balance_after_resp.json()["current_balance"])
+
+@pytest.mark.asyncio
+async def test_rent_journal_entry_affects_balance(client: AsyncClient, auth_headers: dict):
+    """Booking the rent (Dr expense / Cr bank 3000) decreases the balance by 3000."""
+    balance_before = float((await _balance(client, auth_headers))["current_balance"])
+    await _post_journal_entry(
+        client, auth_headers,
+        debit_account=_expense_account_id, credit_account=_account_id,
+        amount="3000.00", entry_date="2026-04-01", is_confirmed=True,
+    )
+    balance_after = float((await _balance(client, auth_headers))["current_balance"])
     assert balance_after == pytest.approx(balance_before - 3000.0, abs=0.01)
 
 

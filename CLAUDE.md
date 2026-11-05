@@ -13,7 +13,7 @@ scripts/stop.sh           # Stop everything
 ## Testing
 
 ```bash
-scripts/ci.sh             # Full CI pipeline (unit + API E2E + CLI E2E)
+scripts/ci.sh             # Full CI pipeline (unit + integration + API E2E + CLI E2E)
 ```
 
 Quick unit tests only (no server needed):

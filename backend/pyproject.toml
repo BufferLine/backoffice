@@ -9,6 +9,9 @@ description = "Backoffice operations system backend"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.115.0",
+    # app code uses the RFC 9110 status names (e.g. HTTP_413_CONTENT_TOO_LARGE),
+    # added in starlette 0.48.0; no fastapi release pins a floor that high.
+    "starlette>=0.48.0",
     "uvicorn[standard]>=0.30.0",
     "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.29.0",
