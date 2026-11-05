@@ -125,7 +125,7 @@ async def attach_file(
     try:
         storage_key, checksum, size = storage.upload(file.file, original_filename, mime_type)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(e))
 
     file_record = File(
         storage_key=storage_key,
