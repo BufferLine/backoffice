@@ -30,6 +30,8 @@ After `reset.sh`, the following are running:
 - API docs (Swagger): `http://localhost:8000/docs`
 - MinIO console: `http://localhost:9001`
 
+> **MinIO images:** upstream MinIO no longer publishes container images (`minio/minio` and `minio/mc` were removed from Docker Hub, and `dl.min.io` no longer serves binaries). `docker-compose.yml` and CI use the community-maintained drop-in rebuilds [`pgsty/minio`](https://hub.docker.com/r/pgsty/minio) and [`pgsty/mc`](https://hub.docker.com/r/pgsty/mc), pinned to a `RELEASE.*` tag. To upgrade, bump the tag in both `docker-compose.yml` and `.github/workflows/ci.yml`.
+
 ### Install CLI (development mode)
 
 ```bash

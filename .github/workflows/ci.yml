@@ -84,7 +84,7 @@ jobs:
             -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=miniodevpassword123 \
-            minio/minio server /data
+            pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data
           # Wait for MinIO to be ready
           for i in $(seq 1 30); do
             curl -sf http://localhost:9000/minio/health/live && break
@@ -93,10 +93,12 @@ jobs:
 
       - name: Create MinIO bucket
         run: |
-          curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
-          chmod +x /usr/local/bin/mc
-          mc alias set local http://localhost:9000 minioadmin miniodevpassword123
-          mc mb local/backoffice --ignore-existing
+          # dl.min.io no longer serves the mc binary (HTTP 410); use the pinned image.
+          docker run --rm --network host --entrypoint sh \
+            pgsty/mc:RELEASE.2026-10-26T00-00-00Z -c '
+              mc alias set local http://localhost:9000 minioadmin miniodevpassword123 &&
+              mc mb local/backoffice --ignore-existing
+            '
 
       - name: Run migrations
         run: alembic upgrade head
