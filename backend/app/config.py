@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     AIRWALLEX_API_KEY: str | None = None
     AIRWALLEX_BASE_URL: str = "https://api.airwallex.com"
     AIRWALLEX_WEBHOOK_SECRET: str | None = None
+    ASPIRE_CLIENT_ID: str | None = None
+    ASPIRE_API_KEY: str | None = None
+    ASPIRE_BASE_URL: str = "https://api.aspireapp.com/public/v1"
+    ASPIRE_SYNC_LOOKBACK_DAYS: int = 365
     STRIPE_SECRET_KEY: str | None = None
     STRIPE_WEBHOOK_SECRET: str | None = None
     WISE_API_TOKEN: str | None = None
