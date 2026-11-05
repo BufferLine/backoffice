@@ -30,6 +30,7 @@ Pure logic tests with no database or server dependency.
 | `test_airwallex.py` | 11 | Airwallex provider capabilities + FX/payment link |
 | `test_aspire.py` | 29 | Aspire provider auth, transaction/balance mapping, minor units |
 | `test_ledger.py` | 22 | Accrual postings: invoice issue, crypto receipt FX diff, rate resolution |
+| `test_onchain.py` | 13 | On-chain receipt verification: transfer parsing, amount/recipient/confirmations, RPC errors |
 | `test_loans.py` | 41 | Loan state machine, interest calculation, repayment logic |
 | `test_loan_service.py` | 2 | Loan service edge cases |
 | `test_journal_schema.py` | 15 | Journal entry validation, multi-debit/credit |

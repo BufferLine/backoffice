@@ -427,14 +427,51 @@ Amounts are exact decimals (sent as strings, never floats), e.g. `--amount 1234.
 
 ### `acct payment receive-crypto`
 
-Record a **verified** stablecoin receipt for an issued invoice in one step: the payment,
-the receipt journal entry (with FX gain/loss), and the invoice marked paid.
+Record a stablecoin receipt for an issued invoice in one step: an **on-chain check**,
+the payment, the receipt journal entry (with FX gain/loss), and the invoice marked paid.
 See [Ledger & Stablecoin Receipts](#ledger--stablecoin-receipts).
 
 ```bash
 acct payment receive-crypto --invoice INVOICE_ID --account WALLET_ACCOUNT_ID \
-  --amount 3750 [--currency USDC|USDT] [--tx-hash 0x...] [--chain base] \
-  [--date YYYY-MM-DD] [--fx-rate SGD_PER_COIN] [--notes TEXT]
+  --amount 3750 --tx-hash 0x... --chain base|ethereum [--currency USDC|USDT] \
+  [--date YYYY-MM-DD] [--fx-rate SGD_PER_COIN] [--notes TEXT] \
+  [--skip-verify --skip-reason TEXT]
+```
+
+The transaction must, on the given chain:
+- have succeeded, in a block that is canonical and at or below the chain's `safe` head
+  (L1-included on Base), with enough confirmations (Ethereum 12, Base 30);
+- transfer the **canonical** token contract (below — a token merely named USDC does not count)
+  to the wallet account's `wallet_address`, totalling **exactly** `--amount`, with nothing
+  moved back out of that wallet in the same transaction;
+- not predate the invoice's issue date, and not come from one of our own wallet accounts;
+- match the wallet account's chain, if the account has one.
+
+Otherwise nothing is recorded (the failure is logged). `--date` defaults to the block's
+Singapore date. The result is stored on the payment (`onchain_verification`). A crypto
+payment recorded any other way cannot mark an invoice paid.
+
+| Chain | Token | Contract |
+|-------|-------|----------|
+| ethereum | USDC | `0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48` |
+| ethereum | USDT | `0xdac17f958d2ee523a2206206994597c13d831ec7` |
+| base | USDC | `0x833589fcd6edb6e08f4c7c32d4f71b54bda02913` |
+
+`--skip-verify --skip-reason "..."` records without the check (e.g. a payment split across
+transfers). It needs the `payment:skip_verification` permission (admin/superadmin), a reason
+of at least 15 characters, and is stored on the payment and in the audit log.
+
+Set the wallet account's deposit address once (needs `payment:manage_wallets`, admin/superadmin;
+the change is audited, and the address is locked once a verified receipt references it):
+`acct account update WALLET_ACCOUNT_ID --wallet-address 0x... --chain base`
+
+### `acct payment verify-tx`
+
+Check a transfer on-chain without recording anything (exit code 1 when not verified).
+
+```bash
+acct payment verify-tx --chain base --tx-hash 0x... [--currency USDC] \
+  (--account WALLET_ACCOUNT_ID | --to 0xADDRESS) [--amount 3750]
 ```
 
 ### `acct payment allocate`
@@ -698,8 +735,8 @@ acct ledger show
 1. **Issue the invoice in USD** (clients pay USDC/USDT 1:1):
    `acct invoice issue INV_ID --fx-rate 1.2934`
    → Dr Receivable-USD 3,750 @ 1.2934 / Cr Revenue SGD 4,850.25
-2. **Verify the receipt yourself** (amount, destination address, confirmations on the explorer
-   or in Coinbase) — the backoffice does not check the chain. Then:
+2. **Record the receipt** — it is verified on-chain first (amount, recipient = the Coinbase
+   USDC account's `wallet_address`, canonical contract, confirmations):
    `acct payment receive-crypto --invoice INV_ID --account <Coinbase USDC> --amount 3750 --tx-hash 0x... --chain base --fx-rate 1.30`
    → Dr Coinbase USDC 3,750 @ 1.30 / Cr Receivable-USD @ 1.2934 / Cr FX gain SGD 24.75; invoice paid.
    Keep holding USDC as long as you like.

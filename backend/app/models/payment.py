@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, text
-from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -19,6 +19,13 @@ class Payment(Base):
             "tx_hash",
             unique=True,
             postgresql_where="tx_hash IS NOT NULL",
+        ),
+        # Case-insensitive uniqueness: 0xABC... and 0xabc... are the same EVM transaction.
+        Index(
+            "uq_payments_tx_hash_lower",
+            text("lower(tx_hash)"),
+            unique=True,
+            postgresql_where=text("tx_hash IS NOT NULL"),
         ),
         Index(
             "uq_payments_reference_number_not_null",
@@ -52,6 +59,8 @@ class Payment(Base):
     journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True
     )
+    # Result of on-chain receipt verification, or {"skipped": true, "reason": ...}.
+    onchain_verification: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False

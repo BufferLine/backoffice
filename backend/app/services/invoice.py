@@ -689,6 +689,11 @@ async def mark_paid(
     payment = result.scalar_one_or_none()
     if payment is None:
         raise ValueError("Payment not found or not linked to this invoice")
+    if payment.payment_type == "crypto" and not payment.onchain_verification:
+        raise ValueError(
+            "Crypto receipts for invoices must be recorded with `acct payment receive-crypto` "
+            "(verified on-chain, or explicitly skipped with a reason)"
+        )
 
     old_status = invoice.status
     invoice.status = invoice_machine.transition(invoice.status, "mark_paid")

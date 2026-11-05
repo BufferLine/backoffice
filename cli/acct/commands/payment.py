@@ -52,20 +52,31 @@ def receive_crypto(
     account: str = typer.Option(..., "--account", help="Wallet account ID that received the coins (e.g. Coinbase USDC)"),
     amount: str = typer.Option(..., "--amount", help="Amount received (must equal the invoice total)", callback=decimal_amount),
     currency: str = typer.Option("USDC", "--currency", help="Coin received: USDC|USDT (settles a USD invoice)"),
-    tx_hash: Optional[str] = typer.Option(None, "--tx-hash", help="On-chain transaction hash"),
-    chain: Optional[str] = typer.Option(None, "--chain", help="Network, e.g. ethereum|base|solana"),
-    date: Optional[str] = typer.Option(None, "--date", help="Receipt date (YYYY-MM-DD, default today)"),
+    tx_hash: Optional[str] = typer.Option(None, "--tx-hash", help="On-chain transaction hash (required unless --skip-verify)"),
+    chain: Optional[str] = typer.Option(None, "--chain", help="Network: base|ethereum (required unless --skip-verify)"),
+    date: Optional[str] = typer.Option(None, "--date", help="Receipt date (YYYY-MM-DD; default: block date in SGT)"),
     fx_rate: Optional[str] = typer.Option(
-        None, "--fx-rate", help="SGD per 1 coin on the receipt date (default: today's Airwallex USD/SGD)",
+        None, "--fx-rate",
+        help="SGD per 1 coin on the receipt date. Required unless the receipt date (default: the block's "
+        "SGT date) is today, when Airwallex USD/SGD is used",
         callback=decimal_amount,
     ),
-    notes: Optional[str] = typer.Option(None, "--notes", help="Notes, e.g. how the amount was verified"),
+    notes: Optional[str] = typer.Option(None, "--notes", help="Notes"),
+    skip_verify: bool = typer.Option(
+        False, "--skip-verify", help="Do not verify on-chain (e.g. split transfer); requires --skip-reason",
+    ),
+    skip_reason: Optional[str] = typer.Option(
+        None, "--skip-reason", help="Why verification is skipped, >= 15 chars (audited; needs payment:skip_verification)",
+    ),
 ) -> None:
-    """Record a verified stablecoin receipt: payment + receipt journal + invoice paid.
+    """Record a stablecoin receipt: on-chain check + payment + receipt journal + invoice paid.
 
-    Verify the amount, destination address, and confirmations on-chain (or in Coinbase)
-    BEFORE running this; the backoffice does not verify the transaction itself.
+    The transaction is verified on-chain first: the canonical USDC/USDT contract on the
+    chain, sent to the wallet account's wallet_address, for exactly --amount, with enough
+    confirmations. Any mismatch rejects the receipt and nothing is recorded.
     """
+    if skip_verify and not skip_reason:
+        raise typer.BadParameter("--skip-verify requires --skip-reason")
     payload: dict = {
         "invoice_id": invoice,
         "wallet_account_id": account,
@@ -74,17 +85,61 @@ def receive_crypto(
     }
     for key, value in (
         ("tx_hash", tx_hash), ("chain_id", chain), ("payment_date", date),
-        ("fx_rate_to_sgd", fx_rate), ("notes", notes),
+        ("fx_rate_to_sgd", fx_rate), ("notes", notes), ("skip_reason", skip_reason),
     ):
         if value:
             payload[key] = value
+    if skip_verify:
+        payload["skip_verification"] = True
     data = api_post("/api/payments/receive-crypto", json_data=payload)
     print_success(f"Crypto receipt recorded: {data['id']} ({data['currency']} {data['amount']})")
     print_success(f"SGD value {data.get('sgd_value')} @ {data.get('fx_rate_to_sgd')} ({data.get('fx_rate_source')})")
     if data.get("journal_entry_id"):
         print_success(f"Journal entry created: {data['journal_entry_id']}")
+    verification = data.get("onchain_verification") or {}
+    if verification.get("skipped"):
+        typer.echo(f"WARNING: on-chain verification skipped: {verification.get('reason')}")
+    elif verification:
+        print_success(
+            f"Verified on {verification.get('chain')}: {verification.get('amount_to_us')} "
+            f"{verification.get('currency')}, {verification.get('confirmations')} confirmations "
+            f"({verification.get('explorer_url')})"
+        )
     print_success(f"Invoice {invoice} marked as paid")
     print_json(data)
+
+
+@app.command()
+def verify_tx(
+    chain: str = typer.Option(..., "--chain", help="Network: base|ethereum"),
+    tx_hash: str = typer.Option(..., "--tx-hash", help="Transaction hash"),
+    currency: str = typer.Option("USDC", "--currency", help="USDC|USDT"),
+    account: Optional[str] = typer.Option(None, "--account", help="Wallet account ID (uses its wallet_address)"),
+    to: Optional[str] = typer.Option(None, "--to", help="Recipient address (instead of --account)"),
+    amount: Optional[str] = typer.Option(None, "--amount", help="Expected amount", callback=decimal_amount),
+) -> None:
+    """Check a stablecoin transfer on-chain without recording anything."""
+    if not account and not to:
+        raise typer.BadParameter("pass --account or --to")
+    payload: dict = {"chain": chain, "tx_hash": tx_hash, "currency": currency.upper()}
+    if account:
+        payload["wallet_account_id"] = account
+    if to:
+        payload["to_address"] = to
+    if amount:
+        payload["expected_amount"] = amount
+    data = api_post("/api/payments/verify-onchain", json_data=payload)
+    if data.get("verified"):
+        checked = "" if amount else " (amount NOT checked: pass --amount)"
+        print_success(
+            f"VERIFIED{checked}: {data['amount_to_us']} {data['currency']} to {data['to_address']} on "
+            f"{data['chain']}, {data['confirmations']} confirmations, from {', '.join(data.get('from_addresses') or [])}"
+        )
+    else:
+        typer.echo("NOT VERIFIED: " + "; ".join(data.get("problems") or []))
+    print_json(data)
+    if not data.get("verified"):
+        raise typer.Exit(code=1)
 
 
 @app.command(name="list")

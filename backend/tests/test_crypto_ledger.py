@@ -26,8 +26,45 @@ from tests.conftest import TestSessionLocal
 ISSUE_RATE = "1.2934"
 RECEIPT_RATE = "1.3000"
 TX_HASH = "0x" + "c0ffee" * 10 + "abcd"
+WALLET_ADDR = "0x" + "c0" * 20
+BAD_TX = "0x" + "bad0" * 16  # the fake chain reports an amount mismatch for this one
+OLD_TX = "0x" + "01d0" * 16  # mined long before any invoice was issued
+INTERNAL_TX = "0x" + "1a1a" * 16  # sent from our own wallet
+PAYER = "0x" + "aa" * 20
 
 ids: dict[str, str] = {}
+fake_chain_calls: list[dict] = []
+
+
+@pytest.fixture(autouse=True)
+def _fake_chain(monkeypatch):
+    """No network in tests: the chain 'confirms' any transfer except BAD_TX."""
+    from datetime import datetime, timezone
+
+    from app.services import onchain
+
+    async def fake_verify(chain, tx_hash, currency, to_address, expected_amount=None):
+        fake_chain_calls.append({"chain": chain, "tx_hash": tx_hash, "to": to_address, "amount": expected_amount})
+        ok = tx_hash != BAD_TX
+        mined = datetime(2020, 1, 1, tzinfo=timezone.utc) if tx_hash == OLD_TX else datetime.now(timezone.utc)
+        sender = WALLET_ADDR if tx_hash == INTERNAL_TX else PAYER
+        return onchain.VerificationResult(
+            verified=ok,
+            chain=chain,
+            tx_hash=tx_hash,
+            currency=currency,
+            token_contract=onchain.TOKENS[(chain, currency)].address,
+            to_address=to_address,
+            amount_to_us=expected_amount if ok else Decimal("1.00"),
+            expected_amount=expected_amount,
+            confirmations=100,
+            min_confirmations=30,
+            block_timestamp=mined,
+            from_addresses=[sender],
+            problems=[] if ok else [f"amount received 1.00 {currency} != expected {expected_amount}"],
+        )
+
+    monkeypatch.setattr(onchain, "verify_stablecoin_transfer", fake_verify)
 
 
 @pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
@@ -42,7 +79,7 @@ async def _restore_ledger_mapping():
         await session.commit()
 
 
-async def _account(client, headers, name, account_type, account_class, currency) -> str:
+async def _account(client, headers, name, account_type, account_class, currency, wallet_address=None) -> str:
     resp = await client.post(
         "/api/accounts",
         json={
@@ -51,6 +88,7 @@ async def _account(client, headers, name, account_type, account_class, currency)
             "account_class": account_class,
             "currency": currency,
             "opening_balance_date": "2026-01-01",
+            "wallet_address": wallet_address,
         },
         headers=headers,
     )
@@ -110,7 +148,7 @@ async def test_setup_accounts_and_mapping(client: AsyncClient, auth_headers: dic
     ids["ar_sgd"] = await _account(client, h, "Receivable SGD", "virtual", "asset", "SGD")
     ids["revenue"] = await _account(client, h, "Revenue", "virtual", "revenue", "SGD")
     ids["fx"] = await _account(client, h, "FX gain/loss", "virtual", "revenue", "SGD")
-    ids["usdc"] = await _account(client, h, "Coinbase USDC", "crypto_wallet", "asset", "USDC")
+    ids["usdc"] = await _account(client, h, "Coinbase USDC", "crypto_wallet", "asset", "USDC", WALLET_ADDR)
     ids["aspire"] = await _account(client, h, "Aspire SGD", "bank", "asset", "SGD")
 
     resp = await client.post(
@@ -185,11 +223,49 @@ async def test_receive_crypto_rejects_wrong_amount(client: AsyncClient, auth_hea
         json={
             "invoice_id": ids["usd_invoice"], "wallet_account_id": ids["usdc"],
             "amount": "3749.99", "currency": "USDC", "fx_rate_to_sgd": RECEIPT_RATE,
+            "chain_id": "base", "tx_hash": "0x" + "01" * 32,
         },
         headers=auth_headers,
     )
     assert resp.status_code == 409, resp.text
     assert "does not equal invoice total" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_receive_crypto_rejects_failed_onchain_verification(client: AsyncClient, auth_headers: dict):
+    resp = await client.post(
+        "/api/payments/receive-crypto",
+        json={
+            "invoice_id": ids["usd_invoice"], "wallet_account_id": ids["usdc"], "amount": "3750.00",
+            "currency": "USDC", "chain_id": "base", "tx_hash": BAD_TX, "fx_rate_to_sgd": RECEIPT_RATE,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409, resp.text
+    assert "On-chain verification failed" in resp.json()["detail"]
+    assert fake_chain_calls[-1]["to"] == WALLET_ADDR
+    resp = await client.get(f"/api/invoices/{ids['usd_invoice']}", headers=auth_headers)
+    assert resp.json()["status"] == "issued"  # nothing recorded
+
+
+@pytest.mark.asyncio
+async def test_receive_crypto_requires_chain_unless_skipped(client: AsyncClient, auth_headers: dict):
+    base = {
+        "invoice_id": ids["usd_invoice"], "wallet_account_id": ids["usdc"], "amount": "3750.00",
+        "currency": "USDC", "tx_hash": TX_HASH, "fx_rate_to_sgd": RECEIPT_RATE,
+    }
+    resp = await client.post("/api/payments/receive-crypto", json=base, headers=auth_headers)
+    assert resp.status_code == 409 and "chain is required" in resp.json()["detail"]
+    resp = await client.post(
+        "/api/payments/receive-crypto", json={**base, "skip_verification": True}, headers=auth_headers
+    )
+    assert resp.status_code == 409 and "skip_reason must explain" in resp.json()["detail"]
+    resp = await client.post(
+        "/api/payments/receive-crypto",
+        json={**base, "skip_verification": True, "skip_reason": "split"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409 and "at least 15" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -216,6 +292,10 @@ async def test_receive_crypto_settles_receivable_with_fx_gain(client: AsyncClien
     assert Decimal(payment["sgd_value"]) == Decimal("4875.00")
     assert payment["fx_rate_source"] == "manual"
     assert payment["journal_entry_id"]
+    verification = payment["onchain_verification"]
+    assert verification["verified"] is True
+    assert verification["chain"] == "base" and verification["to_address"] == WALLET_ADDR
+    assert verification["amount_to_us"] == "3750.00"
 
     lines = await _journal(client, auth_headers, payment["journal_entry_id"])
     assert sorted(lines) == sorted([
@@ -239,7 +319,8 @@ async def test_same_tx_hash_cannot_be_recorded_twice(client: AsyncClient, auth_h
         "/api/payments/receive-crypto",
         json={
             "invoice_id": invoice_id, "wallet_account_id": ids["usdc"], "amount": "1.00",
-            "currency": "USDC", "tx_hash": TX_HASH, "fx_rate_to_sgd": RECEIPT_RATE,
+            "currency": "USDC", "tx_hash": TX_HASH.upper().replace("0X", "0x"), "chain_id": "base",
+            "fx_rate_to_sgd": RECEIPT_RATE,
         },
         headers=auth_headers,
     )
@@ -247,6 +328,206 @@ async def test_same_tx_hash_cannot_be_recorded_twice(client: AsyncClient, auth_h
     assert "tx_hash" in resp.json()["detail"]
     resp = await client.get(f"/api/invoices/{invoice_id}", headers=auth_headers)
     assert resp.json()["status"] == "issued"
+
+
+@pytest.mark.asyncio
+async def test_skip_verification_with_reason_is_recorded(client: AsyncClient, auth_headers: dict):
+    invoice_id = await _invoice(client, auth_headers, "USD", "2.00")
+    resp = await client.post(
+        f"/api/invoices/{invoice_id}/issue", json={"fx_rate_to_sgd": ISSUE_RATE}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    calls_before = len(fake_chain_calls)
+    resp = await client.post(
+        "/api/payments/receive-crypto",
+        json={
+            "invoice_id": invoice_id, "wallet_account_id": ids["usdc"], "amount": "2.00", "currency": "USDC",
+            "payment_date": "2026-11-05", "fx_rate_to_sgd": RECEIPT_RATE,
+            "skip_verification": True, "skip_reason": "Client paid in two transfers; checked in Coinbase",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    # (a too-short reason is rejected; see test_receive_crypto_requires_chain_unless_skipped)
+    assert len(fake_chain_calls) == calls_before  # chain not queried
+    assert resp.json()["onchain_verification"] == {
+        "skipped": True, "reason": "Client paid in two transfers; checked in Coinbase", "chain": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_receipt_date_defaults_to_block_date_in_sgt(client: AsyncClient, auth_headers: dict):
+    invoice_id = await _invoice(client, auth_headers, "USD", "3.00")
+    resp = await client.post(
+        f"/api/invoices/{invoice_id}/issue", json={"fx_rate_to_sgd": ISSUE_RATE}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await client.post(
+        "/api/payments/receive-crypto",
+        json={
+            "invoice_id": invoice_id, "wallet_account_id": ids["usdc"], "amount": "3.00", "currency": "USDC",
+            "chain_id": "base", "tx_hash": "0x" + "02" * 32, "fx_rate_to_sgd": RECEIPT_RATE,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    from app.services.ledger import today_local
+
+    assert resp.json()["payment_date"] == today_local().isoformat()  # the block's SGT date
+
+
+@pytest.mark.asyncio
+async def test_transfer_older_than_invoice_or_from_own_wallet_is_rejected(client: AsyncClient, auth_headers: dict):
+    invoice_id = await _invoice(client, auth_headers, "USD", "4.00")
+    resp = await client.post(
+        f"/api/invoices/{invoice_id}/issue", json={"fx_rate_to_sgd": ISSUE_RATE}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    body = {
+        "invoice_id": invoice_id, "wallet_account_id": ids["usdc"], "amount": "4.00", "currency": "USDC",
+        "chain_id": "base", "fx_rate_to_sgd": RECEIPT_RATE,
+    }
+    resp = await client.post("/api/payments/receive-crypto", json={**body, "tx_hash": OLD_TX}, headers=auth_headers)
+    assert resp.status_code == 409 and "predates the invoice" in resp.json()["detail"]
+    resp = await client.post(
+        "/api/payments/receive-crypto", json={**body, "tx_hash": INTERNAL_TX}, headers=auth_headers
+    )
+    assert resp.status_code == 409 and "internal transfer" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_case_variant_tx_hash_is_a_duplicate_everywhere(client: AsyncClient, auth_headers: dict):
+    upper = "0x" + TX_HASH[2:].upper()
+    resp = await client.post(
+        "/api/payments",
+        json={"payment_type": "crypto", "currency": "USDC", "amount": "3750.00", "tx_hash": upper},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409, resp.text
+    resp = await client.post(
+        "/api/payments",
+        json={"payment_type": "crypto", "currency": "USDC", "amount": "3750.00", "tx_hash": TX_HASH[2:]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409, resp.text  # missing 0x is the same transaction
+
+
+@pytest.mark.asyncio
+async def test_unverified_crypto_payment_cannot_mark_invoice_paid(client: AsyncClient, auth_headers: dict):
+    invoice_id = await _invoice(client, auth_headers, "USD", "6.00")
+    resp = await client.post(
+        f"/api/invoices/{invoice_id}/issue", json={"fx_rate_to_sgd": ISSUE_RATE}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await client.post(
+        "/api/payments",
+        json={
+            "payment_type": "crypto", "related_entity_type": "invoice", "related_entity_id": invoice_id,
+            "currency": "USD", "amount": "6.00", "tx_hash": "0x" + "66" * 32,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    payment_id = resp.json()["id"]
+    resp = await client.post(
+        f"/api/invoices/{invoice_id}/mark-paid", json={"payment_id": payment_id}, headers=auth_headers
+    )
+    assert resp.status_code == 422 and "receive-crypto" in resp.json()["detail"]
+    resp = await client.post(
+        f"/api/payments/{payment_id}/link",
+        json={"related_entity_type": "invoice", "related_entity_id": invoice_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code in (409, 422), resp.text
+    assert "receive-crypto" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_verified_wallet_address_is_immutable_and_audited(client: AsyncClient, auth_headers: dict):
+    resp = await client.patch(
+        f"/api/accounts/{ids['usdc']}", json={"wallet_address": "0x" + "99" * 20}, headers=auth_headers
+    )
+    assert resp.status_code == 409, resp.text
+    assert "verified receipt" in resp.json()["detail"]
+
+    # A wallet account with no receipts can change, is normalised, and the change is audited.
+    other = await _account(client, auth_headers, "Spare USDC", "crypto_wallet", "asset", "USDC")
+    resp = await client.patch(
+        f"/api/accounts/{other}", json={"wallet_address": "0x" + "AB" * 20}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["wallet_address"] == "0x" + "ab" * 20
+    from app.models.audit import AuditLog
+
+    async with TestSessionLocal() as session:
+        rows = (
+            await session.execute(
+                select(AuditLog).where(AuditLog.action == "account.wallet_change", AuditLog.entity_id == uuid.UUID(other))
+            )
+        ).scalars().all()
+    assert len(rows) == 1
+
+    resp = await client.patch(f"/api/accounts/{other}", json={"wallet_address": "0xnothex"}, headers=auth_headers)
+    assert resp.status_code == 409, resp.text
+
+
+@pytest.mark.asyncio
+async def test_accountant_cannot_set_wallets_or_skip_verification(client: AsyncClient, auth_headers: dict):
+    from app.models.user import Role
+
+    resp = await client.post(
+        "/api/users/invite",
+        json={"email": "acct-ledger@test.com", "name": "Accountant", "password": "acctpass123"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    user_id = resp.json()["id"]
+    async with TestSessionLocal() as session:
+        role_id = (await session.execute(select(Role.id).where(Role.name == "accountant"))).scalar_one()
+    resp = await client.post(f"/api/users/{user_id}/roles", json={"role_id": str(role_id)}, headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    # Mint the token directly: other modules exhaust the login rate limit in a full run.
+    from app.services.auth import _DEFAULT_ROLES, create_access_token
+
+    perms = next(p for name, _, p in _DEFAULT_ROLES if name == "accountant")
+    assert "payment:manage_wallets" not in perms and "payment:skip_verification" not in perms
+    acct = {"Authorization": f"Bearer {create_access_token(uuid.UUID(user_id), perms)}"}
+
+    resp = await client.patch(f"/api/accounts/{ids['usdc']}", json={"wallet_address": PAYER}, headers=acct)
+    assert resp.status_code == 403, resp.text
+    resp = await client.post(
+        "/api/accounts",
+        json={"name": "Mine", "account_type": "crypto_wallet", "account_class": "asset", "currency": "USDC",
+              "opening_balance_date": "2026-01-01", "wallet_address": PAYER},
+        headers=acct,
+    )
+    assert resp.status_code == 403, resp.text
+    resp = await client.post(
+        "/api/payments/receive-crypto",
+        json={"invoice_id": ids["usd_invoice"], "wallet_account_id": ids["usdc"], "amount": "1", "currency": "USDC",
+              "skip_verification": True, "skip_reason": "accountant trying to skip"},
+        headers=acct,
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.asyncio
+async def test_verify_onchain_endpoint_is_read_only(client: AsyncClient, auth_headers: dict):
+    resp = await client.post(
+        "/api/payments/verify-onchain",
+        json={"chain": "base", "tx_hash": BAD_TX, "currency": "USDC", "wallet_account_id": ids["usdc"],
+              "expected_amount": "5"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["verified"] is False and body["problems"]
+    resp = await client.post(
+        "/api/payments/verify-onchain",
+        json={"chain": "base", "tx_hash": BAD_TX, "currency": "USDC", "wallet_account_id": ids["ar_usd"]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422  # account has no wallet_address
 
 
 @pytest.mark.asyncio
@@ -309,12 +590,14 @@ async def test_trial_balance_after_off_ramp(client: AsyncClient, auth_headers: d
     resp = await client.get("/api/journal-entries/trial-balance", headers=auth_headers)
     assert resp.status_code == 200, resp.text
     rows = {r["account_id"]: r for r in resp.json()["rows"]}
-    # USDC fully sold, receivable fully settled; net FX = +24.75 - 75.00 = -50.25
-    assert Decimal(rows[ids["usdc"]]["balance"]) == 0
-    assert Decimal(rows[ids["ar_usd"]]["balance"]) == Decimal("1.00")  # the 1.00 invoice above is still open
+    # 3,750 USDC sold; the 2.00 + 3.00 USDC received in later receipts are still held
+    assert Decimal(rows[ids["usdc"]]["balance"]) == Decimal("5")
+    assert Decimal(rows[ids["usdc"]]["balance_sgd"]) == Decimal("6.50")  # 5 @ 1.30
+    # Still open: 1.00 (duplicate tx), 4.00 (stale/internal tx rejected), 6.00 (unverified payment refused)
+    assert Decimal(rows[ids["ar_usd"]]["balance"]) == Decimal("11.00")
     assert Decimal(rows[ids["aspire"]]["total_debit"]) == Decimal("4800")
-    # Net FX: gain 24.75 on receipt, loss 75.00 on off-ramp → net debit (loss) 50.25
-    assert Decimal(rows[ids["fx"]]["balance_sgd"]) == Decimal("50.25")
+    # FX: gains 24.75 + 0.01 + 0.02 on receipts, loss 75.00 on off-ramp → net loss 50.22
+    assert Decimal(rows[ids["fx"]]["balance_sgd"]) == Decimal("50.22")
     # Mixed USD/USDC/SGD books balance in SGD (native sums would not).
     body = resp.json()
     assert body["is_balanced"] is True, body

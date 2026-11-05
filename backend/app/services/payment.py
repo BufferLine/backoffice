@@ -100,10 +100,15 @@ async def record_payment(
         if existing is not None:
             return existing
 
-    # tx_hash uniqueness check
+    # tx_hash uniqueness check (canonical form: EVM hashes are case-insensitive)
     if data.tx_hash:
+        from sqlalchemy import func as sa_func
+
+        from app.services.onchain import canonical_tx_hash
+
+        data = data.model_copy(update={"tx_hash": canonical_tx_hash(data.tx_hash)})
         result = await db.execute(
-            select(Payment).where(Payment.tx_hash == data.tx_hash)
+            select(Payment).where(sa_func.lower(Payment.tx_hash) == data.tx_hash.lower())
         )
         duplicate = result.scalar_one_or_none()
         if duplicate is not None:
@@ -261,6 +266,12 @@ async def link_payment(
             raise ValueError(f"Invoice {entity_id} not found")
         if invoice.status != "issued":
             raise ValueError(f"Invoice must be in 'issued' state to link payment, current: {invoice.status}")
+
+        if payment.payment_type == "crypto" and not payment.onchain_verification:
+            raise ValueError(
+                "Crypto receipts for invoices must be recorded with `acct payment receive-crypto` "
+                "(verified on-chain, or explicitly skipped with a reason)"
+            )
 
         # Validate amount and currency
         if float(payment.amount) < float(invoice.total_amount):

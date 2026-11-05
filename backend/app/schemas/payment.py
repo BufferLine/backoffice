@@ -36,6 +36,19 @@ class CryptoReceiptCreate(BaseModel):
     payment_date: Optional[date] = None
     fx_rate_to_sgd: Optional[Decimal] = None
     notes: Optional[str] = None
+    # On-chain verification is mandatory unless explicitly skipped with a reason.
+    skip_verification: bool = False
+    skip_reason: Optional[str] = None
+
+
+class OnchainVerifyRequest(BaseModel):
+    chain: str
+    tx_hash: str
+    currency: str = "USDC"
+    # Recipient: an account's wallet_address, or an explicit address.
+    wallet_account_id: Optional[UUID] = None
+    to_address: Optional[str] = None
+    expected_amount: Optional[Decimal] = None
 
 
 class PaymentResponse(BaseModel):
@@ -53,6 +66,7 @@ class PaymentResponse(BaseModel):
     tx_hash: Optional[str]
     chain_id: Optional[str]
     journal_entry_id: Optional[UUID] = None
+    onchain_verification: Optional[dict] = None
     reference_number: Optional[str]
     bank_reference: Optional[str]
     proof_file_id: Optional[UUID]

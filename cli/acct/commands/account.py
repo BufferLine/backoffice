@@ -89,6 +89,10 @@ def update(
     institution: Optional[str] = typer.Option(None, "--institution", help="Institution name"),
     account_number: Optional[str] = typer.Option(None, "--account-number", help="Account number"),
     statement_source: Optional[str] = typer.Option(None, "--statement-source", help="Statement source"),
+    wallet_address: Optional[str] = typer.Option(
+        None, "--wallet-address", help="Wallet/deposit address (used to verify stablecoin receipts on-chain)",
+    ),
+    chain_id: Optional[str] = typer.Option(None, "--chain", help="Chain of the wallet, e.g. base|ethereum"),
     activate: bool = typer.Option(False, "--activate", help="Activate account"),
     deactivate: bool = typer.Option(False, "--deactivate", help="Deactivate account"),
 ) -> None:
@@ -99,6 +103,8 @@ def update(
         "institution": institution,
         "account_number": account_number,
         "statement_source": statement_source,
+        "wallet_address": wallet_address,
+        "chain_id": chain_id,
     }
     if activate:
         field_map["is_active"] = True

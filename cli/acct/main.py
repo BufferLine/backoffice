@@ -72,15 +72,18 @@ converted to SGD later, landing in Aspire. The ledger is accrual-based (SGD func
 
   acct ledger show                              # Must be configured (receivable/revenue/fx)
   acct invoice issue INV_ID [--fx-rate R]       # Posts Dr Receivable-USD / Cr Revenue
-  # VERIFY the receipt first: amount, destination address, confirmations (explorer/Coinbase).
-  acct payment receive-crypto --invoice INV_ID --account COINBASE_USDC_UUID \
+  # The receipt is verified on-chain automatically (canonical contract, recipient =
+  # the wallet account's wallet_address, exact amount, confirmations). Optionally
+  # check first with: acct payment verify-tx --chain base --tx-hash 0x... --account UUID
+  acct payment receive-crypto --invoice INV_ID --account COINBASE_USDC_UUID \\
     --amount 3750 --tx-hash 0x... --chain base [--fx-rate R]
   # Later, when the off-ramped SGD appears in Aspire (bank tx), record the conversion
   # and point it at that deposit so it is NOT reconciled a second time:
-  acct fx record --sell-currency USDC --sell-amount N --buy-currency SGD --buy-amount M \
+  acct fx record --sell-currency USDC --sell-amount N --buy-currency SGD --buy-amount M \\
     --sell-account COINBASE_USDC_UUID --buy-account ASPIRE_SGD_UUID --date D --bank-tx TX_ID
 
-Never record a receipt you have not verified on-chain. Amounts are exact decimals.
+Never use --skip-verify unless the user tells you to, and always give the real reason.
+Amounts are exact decimals.
 
 ## How to classify transactions
 

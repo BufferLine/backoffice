@@ -264,6 +264,33 @@ ENABLE_SYNC_SCHEDULER=true
 
 Rate limit: < 100 requests/min per GET endpoint (429 on breach).
 
+## On-chain Receipt Verification
+
+`acct payment receive-crypto` verifies each stablecoin receipt against the chain before
+recording it (`backend/app/services/onchain.py`), using plain JSON-RPC — no API key.
+
+- Calls: `eth_chainId` (guards against a mis-pointed RPC), `eth_getTransactionReceipt`,
+  `eth_blockNumber`, `eth_getBlockByNumber` (block time → default receipt date in SGT).
+- Accepts only ERC-20 `Transfer` logs from the canonical contracts: Ethereum USDC/USDT, Base USDC.
+- Recipient is the wallet account's `wallet_address`; the amount must match exactly; outbound
+  transfers from that wallet in the same tx fail verification.
+- Finality: block ≤ `safe` head and receipt block hash == canonical block hash; plus N confirmations.
+- Rejects transfers that predate the invoice or come from our own wallets.
+- Result (or skip reason) stored in `payments.onchain_verification`; skips are audited.
+- Permissions: `payment:manage_wallets` to set/change wallet addresses (audited; locked once
+  used by a verified receipt), `payment:skip_verification` to skip. Both: admin and superadmin only.
+- tx hashes are unique case-insensitively (`uq_payments_tx_hash_lower`).
+- RPC errors never echo the full URL (only the host), so keyed provider URLs are safe to configure.
+
+```
+ONCHAIN_RPC_ETHEREUM=https://ethereum-rpc.publicnode.com   # default; any provider URL works
+ONCHAIN_RPC_BASE=https://mainnet.base.org                  # default
+ONCHAIN_MIN_CONFIRMATIONS_ETHEREUM=12
+ONCHAIN_MIN_CONFIRMATIONS_BASE=30
+```
+
+Read-only check: `acct payment verify-tx --chain base --tx-hash 0x... --account <wallet-account-id>`.
+
 ## DBS Statement Parser
 
 Parser for DBS/POSB iBanking PDF statements.
