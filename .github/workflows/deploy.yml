@@ -1,0 +1,37 @@
+# Deploys to the BufferLine Mac mini on every push to main. Nothing else deploys.
+# The same job as BufferLine/infra's deploy-app.yml (this public repo can't call that private one):
+# check out this commit and infra, then run infra's bin/deploy. Settings: BufferLine/infra/apps/backoffice.yaml.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.repository == 'BufferLine/backoffice'
+    runs-on: [self-hosted, macOS, ARM64, bufferline]
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-backoffice
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: BufferLine/infra
+          token: ${{ secrets.INFRA_READ_TOKEN }}
+          path: infra
+          persist-credentials: false
+
+      - name: Deploy
+        run: infra/bin/deploy backoffice src infra
+        env:
+          HIDE_LOGS: 1 # this repo's run logs are public
