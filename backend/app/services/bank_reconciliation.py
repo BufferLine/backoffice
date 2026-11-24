@@ -162,6 +162,7 @@ async def auto_match(db: AsyncSession) -> AutoMatchResult:
                 Payment.amount == tx.amount,
                 Payment.payment_date >= date_from,
                 Payment.payment_date <= date_to,
+                Payment.payment_type != "advance",  # settled from advances, not by a bank deposit
             )
         )
         candidates = list(payment_result.scalars().all())
@@ -213,7 +214,7 @@ async def try_auto_match_payment(
     Called automatically after payment creation to attempt immediate matching.
     Uses composite criteria: amount + currency + reference + date.
     """
-    if not payment.payment_date:
+    if not payment.payment_date or payment.payment_type == "advance":
         return None
 
     date_from = payment.payment_date - timedelta(days=3)
@@ -281,7 +282,9 @@ async def ignore_transaction(
     tx_id: uuid.UUID,
     actor_id: uuid.UUID,
 ) -> BankTransaction:
-    tx = await _get_transaction(db, tx_id)
+    tx = await _get_transaction(db, tx_id, lock=True)
+    if tx.match_status == "reconciled" or tx.journal_entry_id is not None:
+        raise ValueError(f"BankTransaction {tx_id} is already reconciled into a journal entry")
     tx.match_status = "ignored"
     await db.flush()
 
@@ -344,7 +347,7 @@ async def reconcile_transaction(
     revenue must not be booked twice). Foreign-currency settlements are rated and
     book the FX difference against the issue-date rate.
     """
-    tx = await _get_transaction(db, tx_id)
+    tx = await _get_transaction(db, tx_id, lock=True)
 
     if tx.match_status == "reconciled":
         raise ValueError(f"BankTransaction {tx_id} is already reconciled")
@@ -397,6 +400,7 @@ async def reconcile_transaction(
 
     tx.match_status = "reconciled"
     tx.account_id = bank_account_id
+    tx.journal_entry_id = entry.id
     await db.flush()
 
     await AuditService(db).log(
@@ -413,8 +417,11 @@ async def reconcile_transaction(
     return tx
 
 
-async def _get_transaction(db: AsyncSession, tx_id: uuid.UUID) -> BankTransaction:
-    result = await db.execute(select(BankTransaction).where(BankTransaction.id == tx_id))
+async def _get_transaction(db: AsyncSession, tx_id: uuid.UUID, lock: bool = False) -> BankTransaction:
+    query = select(BankTransaction).where(BankTransaction.id == tx_id)
+    if lock:
+        query = query.with_for_update()
+    result = await db.execute(query)
     tx = result.scalar_one_or_none()
     if tx is None:
         raise ValueError(f"BankTransaction {tx_id} not found")
@@ -520,6 +527,7 @@ async def _reconcile_invoice_settlement(
     payment.journal_entry_id = entry.id
     tx.match_status = "reconciled"
     tx.account_id = bank_account_id
+    tx.journal_entry_id = entry.id
     await db.flush()
 
     await AuditService(db).log(
@@ -537,3 +545,118 @@ async def _reconcile_invoice_settlement(
         },
     )
     return tx
+
+
+async def link_transactions(
+    db: AsyncSession,
+    journal_entry_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    tx_ids: Optional[list[uuid.UUID]] = None,
+    coinbase_order_ids: Optional[list[str]] = None,
+    description: Optional[str] = None,
+) -> list[BankTransaction]:
+    """Reconcile bank rows into an existing, confirmed journal entry.
+
+    Integrity: per (account, currency), the inflows of all rows linked to the entry
+    (already linked + these) must equal the entry's debits on that account, and the
+    outflows must equal its credits — each side separately, so offsetting rows can
+    never be "explained" by an entry that books nothing. Rows must be unreconciled,
+    assigned to an account, and not matched to a payment (those settle through
+    reconcile so the receivable is cleared).
+    """
+    from sqlalchemy import or_
+
+    from app.models.journal import JournalEntry, JournalLine
+
+    entry = (
+        await db.execute(select(JournalEntry).where(JournalEntry.id == journal_entry_id).with_for_update())
+    ).scalar_one_or_none()
+    if entry is None:
+        raise ValueError(f"Journal entry {journal_entry_id} not found")
+    if not entry.is_confirmed:
+        raise ValueError("Confirm the journal entry before linking bank transactions to it")
+
+    conditions = []
+    if tx_ids:
+        conditions.append(BankTransaction.id.in_(tx_ids))
+    if coinbase_order_ids:
+        conditions.append(
+            (BankTransaction.source == "coinbase")
+            & BankTransaction.raw_data_json["advanced_trade_fill"]["order_id"].astext.in_(coinbase_order_ids)
+        )
+    if not conditions:
+        raise ValueError("Pass tx_ids and/or coinbase_order_ids")
+    txs = list(
+        (
+            await db.execute(
+                select(BankTransaction).where(or_(*conditions)).order_by(BankTransaction.id).with_for_update()
+            )
+        ).scalars().all()
+    )
+    if tx_ids:
+        missing = set(tx_ids) - {t.id for t in txs}
+        if missing:
+            raise ValueError(f"Bank transactions not found: {sorted(str(m) for m in missing)}")
+    if not txs:
+        raise ValueError("No bank transactions matched")
+
+    for t in txs:
+        if t.match_status in ("reconciled", "ignored"):
+            raise ValueError(f"Bank transaction {t.id} is already {t.match_status}")
+        if t.account_id is None:
+            raise ValueError(f"Bank transaction {t.id} is not assigned to an account")
+        if t.matched_payment_id is not None:
+            raise ValueError(
+                f"Bank transaction {t.id} is matched to payment {t.matched_payment_id}; reconcile it instead "
+                "so the payment settles"
+            )
+
+    already = list(
+        (await db.execute(select(BankTransaction).where(BankTransaction.journal_entry_id == entry.id))).scalars().all()
+    )
+
+    debits: dict[tuple[uuid.UUID, str], Decimal] = {}
+    credits: dict[tuple[uuid.UUID, str], Decimal] = {}
+    for line in (await db.execute(select(JournalLine).where(JournalLine.journal_entry_id == entry.id))).scalars():
+        key = (line.account_id, line.currency)
+        debits[key] = debits.get(key, Decimal("0")) + Decimal(str(line.debit))
+        credits[key] = credits.get(key, Decimal("0")) + Decimal(str(line.credit))
+
+    inflow: dict[tuple[uuid.UUID, str], Decimal] = {}
+    outflow: dict[tuple[uuid.UUID, str], Decimal] = {}
+    for t in [*already, *txs]:
+        key = (t.account_id, t.currency)
+        amount = Decimal(str(t.amount))
+        if amount >= 0:
+            inflow[key] = inflow.get(key, Decimal("0")) + amount
+        else:
+            outflow[key] = outflow.get(key, Decimal("0")) - amount
+
+    tol = Decimal("0.000001")
+    for key in set(inflow) | set(outflow):
+        if key not in debits:
+            raise ValueError(f"Journal entry {entry.id} has no {key[1]} line for account {key[0]}")
+        if abs(inflow.get(key, Decimal("0")) - debits[key]) > tol or abs(outflow.get(key, Decimal("0")) - credits[key]) > tol:
+            raise ValueError(
+                f"Bank rows for account {key[0]} ({key[1]}) bring in {inflow.get(key, 0)} and take out "
+                f"{outflow.get(key, 0)}, but the journal entry debits {debits[key]} and credits {credits[key]} "
+                "on it; link exactly the complete set of rows"
+            )
+
+    for t in txs:
+        t.match_status = "reconciled"
+        t.journal_entry_id = entry.id
+    await db.flush()
+
+    await AuditService(db).log(
+        action="bank_transaction.link",
+        entity_type="journal_entry",
+        entity_id=entry.id,
+        actor_id=actor_id,
+        input_data={
+            "tx_ids": [str(t.id) for t in txs],
+            "coinbase_order_ids": list(coinbase_order_ids or []),
+            "description": description,
+        },
+    )
+    return txs

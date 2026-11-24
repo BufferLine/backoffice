@@ -51,6 +51,59 @@ def create(
     print_json(data)
 
 
+@app.command("post")
+def post_entries(
+    file: str = typer.Argument(..., help="JSON file: one entry object or a list of entries"),
+    confirm: bool = typer.Option(True, "--confirm/--no-confirm", help="Confirm the entries once all are accepted"),
+) -> None:
+    """Post multi-line / multi-currency journal entries from a JSON file, all or nothing.
+
+    Each entry: {"entry_date": "YYYY-MM-DD", "description": "...", "lines": [
+      {"account_id": "...", "debit": "18660", "currency": "USDT", "fx_rate_to_sgd": "1.283089"},
+      {"account_id": "...", "credit": "18660", "currency": "USD", "fx_rate_to_sgd": "1.283089"}]}
+    Amounts and rates must be strings (exact decimals). Every entry is first posted
+    unconfirmed; if any is rejected, the ones already posted are deleted. Only when all
+    are accepted are they confirmed (unless --no-confirm). The flag overrides any
+    "is_confirmed" in the file.
+    """
+    import json
+    from decimal import Decimal
+    from pathlib import Path
+
+    payload = json.loads(Path(file).read_text(), parse_float=Decimal, parse_int=Decimal)
+    entries = payload if isinstance(payload, list) else [payload]
+    for i, entry in enumerate(entries, 1):
+        for line in entry.get("lines", []):
+            for key in ("debit", "credit", "fx_rate_to_sgd"):
+                if key in line and line[key] is not None and not isinstance(line[key], str):
+                    raise typer.BadParameter(f"entry {i}: {key} must be a string (exact decimal), got {line[key]!r}")
+
+    posted: list[dict] = []
+    try:
+        for i, entry in enumerate(entries, 1):
+            body = dict(entry)
+            body["is_confirmed"] = False
+            body["lines"] = [{"debit": "0", "credit": "0", **line} for line in entry.get("lines", [])]
+            data = api_post("/api/journal-entries", json_data=body)
+            posted.append({"n": i, "id": data.get("id"), "entry_date": data.get("entry_date"),
+                           "description": data.get("description")})
+    except BaseException:
+        for p in reversed(posted):
+            try:
+                api_delete(f"/api/journal-entries/{p['id']}")
+            except BaseException:
+                typer.echo(f"WARNING: could not delete unconfirmed entry {p['id']}; delete it manually", err=True)
+        typer.echo(f"Rejected at entry {len(posted) + 1}; {len(posted)} unconfirmed entr(ies) rolled back.", err=True)
+        raise
+
+    if confirm:
+        for p in posted:
+            api_post(f"/api/journal-entries/{p['id']}/confirm")
+    for p in posted:
+        print_success(f"[{p['n']}/{len(entries)}] {p['entry_date']} {p['id']} {p['description'] or ''}")
+    print_json(posted)
+
+
 @app.command("list")
 def list_entries(
     page: int = typer.Option(1, "--page"),

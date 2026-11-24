@@ -112,6 +112,7 @@ async def setup_database():
             Currency(code="SGD", name="Singapore Dollar", symbol="S$", is_crypto=False, is_active=True),
             Currency(code="USD", name="US Dollar", symbol="$", is_crypto=False, is_active=True),
             Currency(code="USDC", name="USD Coin", symbol="USDC", is_crypto=True, chain_id="ethereum", is_active=True),
+            Currency(code="USDT", name="Tether", symbol="USDT", is_crypto=True, chain_id="ethereum", is_active=True),
             Currency(code="ETH", name="Ethereum", symbol="ETH", is_crypto=True, chain_id="ethereum", is_active=True),
         ]
         for cur in _currencies:

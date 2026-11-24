@@ -110,6 +110,16 @@ async def delete_journal_entry(db: AsyncSession, entry_id: uuid.UUID) -> None:
     entry = await get_journal_entry(db, entry_id)
     if entry.is_confirmed:
         raise ValueError("Cannot delete a confirmed journal entry")
+    # Bank rows reconciled into this (unconfirmed) entry go back to unmatched.
+    from sqlalchemy import update
+
+    from app.models.bank_transaction import BankTransaction
+
+    await db.execute(
+        update(BankTransaction)
+        .where(BankTransaction.journal_entry_id == entry.id)
+        .values(match_status="unmatched", journal_entry_id=None)
+    )
     await db.delete(entry)
     await db.flush()
 

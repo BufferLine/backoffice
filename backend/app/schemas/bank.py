@@ -23,6 +23,8 @@ class BankTransactionResponse(BaseModel):
     statement_file_id: Optional[UUID]
     imported_at: datetime
     imported_by: Optional[UUID]
+    account_id: Optional[UUID] = None
+    journal_entry_id: Optional[UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -57,3 +59,18 @@ class AutoMatchResult(BaseModel):
     matched_count: int
     unmatched_count: int
     results: list[AutoMatchResultItem]
+
+
+class BankTxLinkRequest(BaseModel):
+    """Reconcile existing bank rows into one already-posted journal entry."""
+
+    journal_entry_id: UUID
+    tx_ids: list[UUID] = []
+    # Coinbase: select every fill of these orders (advanced_trade_fill.order_id).
+    coinbase_order_ids: list[str] = []
+    description: Optional[str] = None
+
+
+class BankTxLinkResponse(BaseModel):
+    journal_entry_id: UUID
+    linked: list[BankTransactionResponse]

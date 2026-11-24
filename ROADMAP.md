@@ -53,6 +53,8 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [x] Link conversion to the landing bank deposit (`--bank-tx`) to prevent double booking
 - [x] Bank-paid invoice deposits settle the receivable instead of booking revenue again
 - [x] Retroactive invoices: fixed invoice number + back-dated issue (`invoice:backdate`, audited)
+- [x] Settle invoices from customer advances (IFRIC 22 revenue at advance-date rate)
+- [x] Link many bank rows (e.g. Coinbase order fills) to one journal entry; `acct journal post` for multi-currency entries
 - [ ] Partial / over-payments and bank-fee deductions on invoice settlement
 - [ ] Historical FX rates (MAS) for back-dated postings
 

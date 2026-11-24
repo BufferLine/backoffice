@@ -138,6 +138,7 @@ async def record_fx_conversion(
     if bank_tx is not None:
         bank_tx.match_status = "reconciled"
         bank_tx.account_id = data.buy_account_id
+        bank_tx.journal_entry_id = journal_entry.id
     await db.flush()
 
     await AuditService(db).log(

@@ -15,6 +15,7 @@ from app.schemas.invoice import (
     InvoiceListResponse,
     InvoiceResponse,
     InvoiceUpdate,
+    ApplyAdvanceRequest,
     IssueInvoiceRequest,
     LineItemCreate,
     LineItemResponse,
@@ -293,6 +294,39 @@ async def post_invoice_journal(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    await db.commit()
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise _not_found()
+    return InvoiceResponse.model_validate(invoice)
+
+
+@router.post("/{invoice_id}/apply-advance", response_model=InvoiceResponse)
+async def apply_advance(
+    invoice_id: uuid.UUID,
+    body: ApplyAdvanceRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write", "journal:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> InvoiceResponse:
+    """Settle an issued invoice from customer advances received before it was issued."""
+    from app.services import ledger
+
+    try:
+        await ledger.apply_customer_advance(
+            db,
+            invoice_id=invoice_id,
+            advance_account_id=body.advance_account_id,
+            actor_id=current_user.id,
+            advance_sgd_value=body.advance_sgd_value,
+            payment_date=body.payment_date,
+            notes=body.notes,
+        )
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except ValueError as exc:
+        detail = str(exc)
+        code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_409_CONFLICT
+        raise HTTPException(status_code=code, detail=detail)
     await db.commit()
     invoice = await invoice_service.get_invoice(db, invoice_id)
     if invoice is None:

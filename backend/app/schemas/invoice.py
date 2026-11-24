@@ -139,6 +139,15 @@ class MarkPaidRequest(BaseModel):
     payment_id: UUID
 
 
+class ApplyAdvanceRequest(BaseModel):
+    advance_account_id: UUID
+    # SGD value of the advances consumed (at their receipt-date rates). Default: the
+    # advance account's average carrying rate.
+    advance_sgd_value: Optional[Decimal] = None
+    payment_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
 class IssueInvoiceRequest(BaseModel):
     # SGD per 1 unit of the invoice currency; only needed for non-SGD invoices
     # when the rate cannot be fetched (e.g. Airwallex not configured).

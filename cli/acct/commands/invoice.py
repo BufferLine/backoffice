@@ -105,6 +105,35 @@ def issue(
 
 
 @app.command()
+def apply_advance(
+    invoice_id: str = typer.Argument(..., help="Issued invoice ID"),
+    advance_account: str = typer.Option(..., "--advance-account", help="Customer advances account ID (liability, invoice currency)"),
+    sgd_value: Optional[str] = typer.Option(
+        None, "--sgd-value",
+        help="SGD value of the advances consumed at their receipt-date rates (default: average carrying rate)",
+        callback=decimal_amount,
+    ),
+    date: Optional[str] = typer.Option(None, "--date", help="Settlement date YYYY-MM-DD (default today)"),
+    notes: Optional[str] = typer.Option(None, "--notes", help="Payment notes"),
+) -> None:
+    """Settle an issued invoice from customer advances received before it (marks it paid).
+
+    Revenue is measured at the advance-date rate (SFRS(I) INT 1-22): the difference to the
+    invoice-date receivable is posted to revenue, not to FX gain/loss.
+    """
+    body: dict = {"advance_account_id": advance_account}
+    if sgd_value:
+        body["advance_sgd_value"] = sgd_value
+    if date:
+        body["payment_date"] = date
+    if notes:
+        body["notes"] = notes
+    data = api_post(f"/api/invoices/{invoice_id}/apply-advance", json_data=body)
+    print_success(f"Invoice {data.get('invoice_number')} settled from customer advances: {data.get('status')}")
+    print_json(data)
+
+
+@app.command()
 def post_journal(
     invoice_id: str = typer.Argument(..., help="Issued invoice ID"),
     fx_rate: Optional[str] = typer.Option(
