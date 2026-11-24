@@ -60,6 +60,17 @@ def configure_scheduler():
             replace_existing=True,
         )
 
+    # Coinbase: transactions hourly, balance every 30min (custodial account, low volume)
+    if settings.COINBASE_API_KEY_NAME and settings.COINBASE_API_PRIVATE_KEY:
+        scheduler.add_job(
+            _run_sync_job, "interval", minutes=60, id="coinbase_sync_transactions",
+            args=["coinbase", "sync_transactions"], max_instances=1, replace_existing=True,
+        )
+        scheduler.add_job(
+            _run_sync_job, "interval", minutes=30, id="coinbase_sync_balance",
+            args=["coinbase", "sync_balance"], max_instances=1, replace_existing=True,
+        )
+
     return scheduler
 
 

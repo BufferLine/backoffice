@@ -70,6 +70,8 @@ def _is_configured(provider_name: str) -> bool:
         return bool(settings.AIRWALLEX_CLIENT_ID and settings.AIRWALLEX_API_KEY)
     if provider_name == "aspire":
         return bool(settings.ASPIRE_CLIENT_ID and settings.ASPIRE_API_KEY)
+    if provider_name == "coinbase":
+        return bool(settings.COINBASE_API_KEY_NAME and settings.COINBASE_API_PRIVATE_KEY)
     return False
 
 

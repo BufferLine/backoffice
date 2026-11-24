@@ -87,6 +87,12 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [ ] Transfers / payouts (needs `transfers` scope + OTP flow)
 - [ ] Webhooks for transfer status
 
+#### Coinbase API
+- [x] Read-only Coinbase App (v2) provider: CDP key JWT (Ed25519/EdDSA or ECDSA/ES256)
+- [x] Transaction sync (sends, trade fills, fiat deposit/withdrawal, interest) → `BankTransaction`
+- [x] Balance sync per currency
+- [ ] Match Coinbase-credited deposits to `receive-crypto` receipts (shared deposit addresses)
+
 #### Stripe Payment Collection
 - [ ] Stripe Payment Link generation on invoice issue
 - [ ] Embed payment link/button in invoice PDF

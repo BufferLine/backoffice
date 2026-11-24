@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     ASPIRE_API_KEY: str | None = None
     ASPIRE_BASE_URL: str = "https://api.aspireapp.com/public/v1"
     ASPIRE_SYNC_LOOKBACK_DAYS: int = 365
+    # Coinbase App API (read-only CDP Secret API key, ECDSA/ES256).
+    COINBASE_API_KEY_NAME: str | None = None  # organizations/{org_id}/apiKeys/{key_id}
+    COINBASE_API_PRIVATE_KEY: str | None = None  # EC PEM; "\n" escapes allowed on one line
     STRIPE_SECRET_KEY: str | None = None
     STRIPE_WEBHOOK_SECRET: str | None = None
     WISE_API_TOKEN: str | None = None

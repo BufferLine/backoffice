@@ -37,6 +37,7 @@ Existing Services (unchanged)
 |------------|:---------:|:------------:|:-------:|:------------:|:--------:|:--------------:|:------------:|
 | Airwallex  |     ✓     |      ✓       |    ✓    |      -       |    ✓     |       -        |      -       |
 | Aspire     |     ✓     |      ✓       |    -    |      -       |    -     |       -        |      -       |
+| Coinbase   |     ✓     |      ✓       |    -    |      -       |    -     |       -        |      -       |
 
 ### Planned (not yet implemented)
 
@@ -58,7 +59,8 @@ backend/app/integrations/
 ├── providers/
 │   ├── __init__.py          # Imports all providers to trigger registration
 │   ├── airwallex.py         # Airwallex provider
-│   └── aspire.py            # Aspire provider (read-only)
+│   ├── aspire.py            # Aspire provider (read-only)
+│   └── coinbase.py          # Coinbase App provider (read-only)
 
 backend/app/models/integration.py     # IntegrationEvent, SyncState, Config
 backend/app/services/integration.py   # Sync orchestration
@@ -263,6 +265,33 @@ ENABLE_SYNC_SCHEDULER=true
 ```
 
 Rate limit: < 100 requests/min per GET endpoint (429 on breach).
+
+## Coinbase
+
+Read-only sync of the company's custodial Coinbase account (Coinbase App API v2).
+Docs: https://docs.cdp.coinbase.com/coinbase-app/track-apis/transactions
+
+### Auth
+- CDP Secret API key with **View** permission only. Ed25519 (the CDP default, signed as `EdDSA`) and ECDSA (`ES256`, PEM) keys both work.
+- A fresh JWT for every request (2-minute lifetime): header `kid` = key name, a random `nonce`; claims
+  `sub` = key name, `iss` = `cdp`, `nbf`/`exp`, and `uri` = `"GET api.coinbase.com{path}"` (no query string).
+- Key name: `organizations/{org_id}/apiKeys/{key_id}`. The private key may be stored on one line with `\n` escapes.
+
+### Sync
+- `GET /v2/accounts` → one Coinbase account per currency (USDT, USDC, SGD, ...); balances summed per currency.
+- `GET /v2/accounts/{id}/transactions` (newest first, `pagination.next_uri`); later syncs re-read 7 days before the last sync.
+- Only `completed` rows are imported. `amount` is signed in the account's currency, and `network.hash` → `reference` (on-chain hash of crypto deposits/sends).
+- Types seen on the company account: `send` (crypto in/out), `advanced_trade_fill` (USDT→USDC, USDC→SGD), `fiat_deposit`, `fiat_withdrawal`, `interest`.
+- Rows land in `BankTransaction` with `source="coinbase"`. Link one backoffice account per currency with
+  `statement_source="coinbase"` (e.g. "Coinbase USDT", "Coinbase USDC", "Coinbase SGD").
+
+### Env Vars
+```
+COINBASE_API_KEY_NAME=organizations/.../apiKeys/...
+COINBASE_API_PRIVATE_KEY="<CDP Ed25519 secret, or EC PEM with \n escapes>"
+```
+
+Scheduler (when `ENABLE_SYNC_SCHEDULER=true`): transactions hourly, balances every 30 minutes.
 
 ## On-chain Receipt Verification
 
