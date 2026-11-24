@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # Client schemas
@@ -77,9 +77,15 @@ class LineItemResponse(BaseModel):
 
 
 # Invoice schemas
+_INVOICE_NUMBER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,49}$"
+
+
 class InvoiceCreate(BaseModel):
     client_id: UUID
     currency: str
+    # Fixed number (e.g. "BL-2026-001") for an invoice already referenced in documents.
+    # Requires invoice:backdate; otherwise the next INV-YYYY-NNNN is assigned.
+    invoice_number: Optional[str] = Field(default=None, pattern=_INVOICE_NUMBER_PATTERN)
     description: Optional[str] = None
     payment_method: Optional[str] = None
     wallet_address: Optional[str] = None
@@ -137,6 +143,8 @@ class IssueInvoiceRequest(BaseModel):
     # SGD per 1 unit of the invoice currency; only needed for non-SGD invoices
     # when the rate cannot be fetched (e.g. Airwallex not configured).
     fx_rate_to_sgd: Optional[Decimal] = None
+    # Past issue date (Singapore date) for retroactive invoicing; requires invoice:backdate.
+    issue_date: Optional[date] = None
 
 
 # Recurring invoice schemas

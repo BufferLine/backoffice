@@ -16,9 +16,16 @@ def create(
     currency: str = typer.Option("SGD", "--currency", help="Invoice currency code"),
     description: str = typer.Option("", "--description", help="Invoice description"),
     payment_method: Optional[list[str]] = typer.Option(None, "--payment-method", help="Payment method ID (repeatable for multiple)"),
+    number: Optional[str] = typer.Option(
+        None, "--number",
+        help="Fixed invoice number for an invoice already referenced in documents, e.g. BL-2026-001 "
+        "(needs invoice:backdate; default: next INV-YYYY-NNNN)",
+    ),
 ) -> None:
     """Create a new draft invoice."""
     payload: dict = {"client_id": client, "currency": currency, "description": description}
+    if number:
+        payload["invoice_number"] = number
     if payment_method:
         if len(payment_method) == 1:
             payload["payment_method_id"] = payment_method[0]
@@ -78,9 +85,18 @@ def issue(
         help="SGD per 1 unit of the invoice currency (non-SGD invoices; default: today's Airwallex rate)",
         callback=decimal_amount,
     ),
+    issue_date: Optional[str] = typer.Option(
+        None, "--issue-date",
+        help="Past issue date YYYY-MM-DD for a retroactive invoice (needs invoice:backdate; pass --fx-rate for that date)",
+    ),
 ) -> None:
     """Issue (send) a draft invoice. Posts the receivable journal when ledger accounts are set."""
-    body = {"fx_rate_to_sgd": fx_rate} if fx_rate else None
+    body: Optional[dict] = {}
+    if fx_rate:
+        body["fx_rate_to_sgd"] = fx_rate
+    if issue_date:
+        body["issue_date"] = issue_date
+    body = body or None
     data = api_post(f"/api/invoices/{invoice_id}/issue", json_data=body)
     print_success(f"Invoice {invoice_id} issued")
     if data.get("journal_entry_id"):

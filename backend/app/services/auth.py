@@ -143,6 +143,7 @@ async def get_user_permissions(db: AsyncSession, user_id: uuid.UUID) -> list[str
 _DEFAULT_PERMISSIONS: list[tuple[str, str, str]] = [
     ("invoice", "read", "Read invoices"),
     ("invoice", "write", "Create and update invoices"),
+    ("invoice", "backdate", "Issue invoices with a past issue date or a fixed invoice number"),
     ("payroll", "read", "Read payroll runs"),
     ("payroll", "write", "Create and update payroll runs"),
     ("payroll", "finalize", "Finalize payroll runs"),
@@ -176,7 +177,7 @@ _DEFAULT_ROLES: list[tuple[str, str, list[str]]] = [
         "admin",
         "Administrator",
         [
-            "invoice:read", "invoice:write",
+            "invoice:read", "invoice:write", "invoice:backdate",
             "payroll:read", "payroll:write",
             "expense:read", "expense:write",
             "payment:read", "payment:write", "payment:manage_wallets", "payment:skip_verification",

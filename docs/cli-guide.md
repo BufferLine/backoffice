@@ -158,10 +158,18 @@ When [ledger accounts](#ledger--stablecoin-receipts) are set, it also posts the 
 journal entry (Dr Receivable / Cr Revenue, + GST output).
 
 ```bash
-acct invoice issue INVOICE_ID [--fx-rate SGD_PER_UNIT]
+acct invoice issue INVOICE_ID [--fx-rate SGD_PER_UNIT] [--issue-date YYYY-MM-DD]
 ```
 
 `--fx-rate` is only for non-SGD invoices; without it, today's Airwallex rate is used.
+
+**Retroactive invoices** (needs the `invoice:backdate` permission — admin/superadmin):
+- `acct invoice create ... --number BL-2026-001` fixes the invoice number (for invoices already
+  referenced in contracts/resolutions); it must be unused. Default numbering is `INV-YYYY-NNNN`.
+- `acct invoice issue INVOICE_ID --issue-date 2026-04-01 --fx-rate 1.3412` issues with a past date
+  (never a future one). The due date follows the client's terms from that date, the receivable is
+  posted on that date at the given rate (a back-dated non-SGD invoice always needs `--fx-rate`),
+  and the audit log records `issue_backdated`.
 
 ### `acct invoice post-journal`
 
