@@ -38,18 +38,27 @@ async def create_invoice(
     current_user: Annotated[AuthenticatedUser, Depends(require_permission("invoice:write"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InvoiceResponse:
-    invoice = await invoice_service.create_invoice(
-        db=db,
-        client_id=body.client_id,
-        currency=body.currency,
-        description=body.description,
-        payment_method=body.payment_method,
-        wallet_address=body.wallet_address,
-        created_by=current_user.id,
-        tax_inclusive=body.tax_inclusive,
-        payment_method_id=body.payment_method_id,
-        payment_method_ids=body.payment_method_ids,
-    )
+    if body.invoice_number and "invoice:backdate" not in current_user.permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Setting a fixed invoice number requires the invoice:backdate permission",
+        )
+    try:
+        invoice = await invoice_service.create_invoice(
+            db=db,
+            client_id=body.client_id,
+            currency=body.currency,
+            description=body.description,
+            payment_method=body.payment_method,
+            wallet_address=body.wallet_address,
+            created_by=current_user.id,
+            tax_inclusive=body.tax_inclusive,
+            payment_method_id=body.payment_method_id,
+            payment_method_ids=body.payment_method_ids,
+            invoice_number=body.invoice_number,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return InvoiceResponse.model_validate(invoice)
 
 
@@ -206,6 +215,16 @@ async def issue_invoice(
     if invoice is None:
         raise _not_found()
 
+    issue_date = body.issue_date if body else None
+    if issue_date is not None and "invoice:backdate" not in current_user.permissions:
+        from app.services.ledger import today_local
+
+        if issue_date != today_local():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Issuing with a past issue date requires the invoice:backdate permission",
+            )
+
     try:
         invoice = await invoice_service.issue_invoice(
             db=db,
@@ -213,6 +232,7 @@ async def issue_invoice(
             user_id=current_user.id,
             file_storage=file_storage,
             fx_rate_to_sgd=body.fx_rate_to_sgd if body else None,
+            issue_date=issue_date,
         )
     except InvalidTransitionError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

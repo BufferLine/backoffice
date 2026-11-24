@@ -52,6 +52,7 @@ Modular integration architecture: each provider is a plugin with API client, web
 - [x] Off-ramp FX conversion at weighted-average carrying rate with realised FX gain/loss
 - [x] Link conversion to the landing bank deposit (`--bank-tx`) to prevent double booking
 - [x] Bank-paid invoice deposits settle the receivable instead of booking revenue again
+- [x] Retroactive invoices: fixed invoice number + back-dated issue (`invoice:backdate`, audited)
 - [ ] Partial / over-payments and bank-fee deductions on invoice settlement
 - [ ] Historical FX rates (MAS) for back-dated postings
 

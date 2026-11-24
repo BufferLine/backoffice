@@ -122,8 +122,12 @@ async def create_invoice(
     tax_inclusive: bool = False,
     payment_method_id: Optional[uuid.UUID] = None,
     payment_method_ids: Optional[list[uuid.UUID]] = None,
+    invoice_number: Optional[str] = None,
 ) -> Invoice:
     """Create a new draft invoice with auto-generated invoice number.
+
+    ``invoice_number`` fixes the number instead (retroactive invoices already
+    referenced in documents); it must be unused. Permission is checked by the API.
 
     Uses a retry loop (up to 3 attempts) to handle concurrent inserts that
     collide on the unique invoice_number constraint.
@@ -155,9 +159,17 @@ async def create_invoice(
     elif payment_method_id is not None:
         effective_pm_ids = [payment_method_id]
 
+    fixed_number = invoice_number
+    if fixed_number is not None:
+        taken = (
+            await db.execute(select(Invoice.id).where(Invoice.invoice_number == fixed_number))
+        ).first()
+        if taken is not None:
+            raise ValueError(f"Invoice number {fixed_number} already exists")
+
     last_error: Exception = RuntimeError("Invoice number generation failed")
-    for _ in range(3):
-        invoice_number = await _next_invoice_number(db)
+    for _ in range(1 if fixed_number is not None else 3):
+        invoice_number = fixed_number or await _next_invoice_number(db)
         invoice = Invoice(
             invoice_number=invoice_number,
             client_id=client_id,
@@ -379,6 +391,7 @@ async def issue_invoice(
     user_id: uuid.UUID,
     file_storage: FileStorageService,
     fx_rate_to_sgd: Optional[Decimal] = None,
+    issue_date: Optional[date] = None,
 ) -> Invoice:
     """Issue a draft invoice: validate, set dates, post receivable, generate PDF, transition state.
 
@@ -397,6 +410,11 @@ async def issue_invoice(
     # Set dates (Singapore local date; the server may run in UTC)
     from app.services.ledger import today_local
     today = today_local()
+    if issue_date is not None and issue_date > today:
+        raise ValueError(f"issue_date {issue_date} is in the future")
+    backdated = issue_date is not None and issue_date != today
+    if issue_date is not None:
+        today = issue_date  # due date and receivable posting follow the issue date
     invoice.issue_date = today
 
     # Calculate due date from client payment terms or company defaults
@@ -433,11 +451,16 @@ async def issue_invoice(
     # Audit log
     audit = AuditService(db)
     await audit.log(
-        action="issue",
+        action="issue_backdated" if backdated else "issue",
         entity_type="invoice",
         entity_id=invoice.id,
         actor_id=user_id,
-        output_data={"invoice_number": invoice.invoice_number, "status": invoice.status},
+        output_data={
+            "invoice_number": invoice.invoice_number,
+            "status": invoice.status,
+            "issue_date": invoice.issue_date.isoformat(),
+            "backdated": backdated,
+        },
     )
 
     from app.services.task import create_action_todo
