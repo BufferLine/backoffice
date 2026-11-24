@@ -116,3 +116,32 @@ def tx_ignore(
     data = api_post(f"/api/bank-transactions/{tx_id}/ignore")
     print_success(f"Transaction {tx_id} marked as ignored")
     print_json(data)
+
+
+@app.command()
+def tx_link(
+    journal: str = typer.Option(..., "--journal", help="Confirmed journal entry ID the rows are reconciled into"),
+    tx: Optional[list[str]] = typer.Option(None, "--tx", help="Bank transaction ID (repeatable)"),
+    coinbase_order: Optional[list[str]] = typer.Option(
+        None, "--coinbase-order", help="Coinbase order ID: links every fill of that order (repeatable)",
+    ),
+    description: Optional[str] = typer.Option(None, "--description", help="Note for the audit log"),
+) -> None:
+    """Reconcile bank rows into an already-posted journal entry.
+
+    The rows' amounts must add up, per account, to exactly what the entry moves on that
+    account — e.g. all fills of a Coinbase order against one conversion entry.
+    """
+    if not tx and not coinbase_order:
+        raise typer.BadParameter("pass --tx and/or --coinbase-order")
+    data = api_post(
+        "/api/bank-transactions/link",
+        json_data={
+            "journal_entry_id": journal,
+            "tx_ids": tx or [],
+            "coinbase_order_ids": coinbase_order or [],
+            "description": description,
+        },
+    )
+    print_success(f"Linked {len(data.get('linked', []))} bank transaction(s) to journal entry {journal}")
+    print_json(data)

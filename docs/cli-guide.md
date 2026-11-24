@@ -738,6 +738,36 @@ acct ledger show
 | `--gst-output` | SGD, class `liability` (needed once an invoice has GST) |
 | `--fx-gain-loss` | SGD, class `revenue` or `expense` |
 
+### Prepayments and grouped bank rows
+
+**Settle an invoice from customer advances** — money received before the invoice was issued
+(prepaid retainers) is first credited to a customer-advances liability (USD) at the receipt-date
+rate, e.g. with `acct journal post`. When the invoice is issued:
+
+```bash
+acct invoice apply-advance INV_ID --advance-account <advances-USD-id> \
+  [--sgd-value <SGD of the advances consumed>] [--date YYYY-MM-DD] [--notes TEXT]
+```
+
+Dr advances (advance-date rate) / Cr receivable (invoice-date rate); the SGD difference adjusts
+**revenue** (SFRS(I) INT 1-22 / IFRIC 22: revenue settled from an advance is measured at the
+advance date), not FX. Records an `advance` payment and marks the invoice paid. Without
+`--sgd-value` the advance account's average carrying rate is used.
+
+**Reconcile several bank rows into one entry** — e.g. a Coinbase order filled in 31 parts:
+
+```bash
+acct journal post conversion.json          # the conversion, posted once
+acct bank tx-link --journal <entry-id> --coinbase-order <order-id> [--tx <bank-tx-id> ...]
+```
+
+Per account, the linked rows must add up to exactly what the entry moves on that account,
+and each row must be unreconciled and assigned to an account.
+
+**`acct journal post FILE.json`** posts one or more multi-line, multi-currency entries:
+`{"entry_date": "...", "description": "...", "lines": [{"account_id": "...", "debit": "18660",
+"currency": "USDT", "fx_rate_to_sgd": "1.283089"}, ...]}` (amounts as strings).
+
 ### Stablecoin invoice → Coinbase → Aspire
 
 1. **Issue the invoice in USD** (clients pay USDC/USDT 1:1):

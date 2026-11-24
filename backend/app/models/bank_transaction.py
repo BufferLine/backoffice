@@ -45,6 +45,10 @@ class BankTransaction(Base):
     account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
     )
+    # Journal entry this row is reconciled into when linked to a separately posted entry.
+    journal_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journal_entries.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     currency_rel = relationship("Currency", foreign_keys=[currency])
     matched_payment = relationship("Payment", foreign_keys=[matched_payment_id])

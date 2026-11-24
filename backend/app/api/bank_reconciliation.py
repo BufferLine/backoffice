@@ -12,6 +12,8 @@ from app.schemas.bank import (
     BankTransactionResponse,
     BankTxMatchRequest,
     BankTxReconcileRequest,
+    BankTxLinkRequest,
+    BankTxLinkResponse,
 )
 from app.services import bank_reconciliation as bank_svc
 
@@ -98,6 +100,32 @@ async def match_bank_transaction(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     return BankTransactionResponse.model_validate(tx)
+
+
+@router.post("/bank-transactions/link", response_model=BankTxLinkResponse)
+async def link_bank_transactions(
+    data: BankTxLinkRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write", "journal:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> BankTxLinkResponse:
+    """Reconcile several bank rows (e.g. all fills of a Coinbase order) into one posted journal entry."""
+    try:
+        txs = await bank_svc.link_transactions(
+            db,
+            journal_entry_id=data.journal_entry_id,
+            actor_id=current_user.id,
+            tx_ids=data.tx_ids,
+            coinbase_order_ids=data.coinbase_order_ids,
+            description=data.description,
+        )
+    except ValueError as e:
+        detail = str(e)
+        code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_409_CONFLICT
+        raise HTTPException(status_code=code, detail=detail)
+    return BankTxLinkResponse(
+        journal_entry_id=data.journal_entry_id,
+        linked=[BankTransactionResponse.model_validate(t) for t in txs],
+    )
 
 
 @router.post("/bank-transactions/{tx_id}/reconcile", response_model=BankTransactionResponse)

@@ -736,3 +736,255 @@ async def receive_crypto_payment(
 
     await invoice_service.mark_paid(db=db, invoice=invoice, payment_id=payment.id, user_id=actor_id)
     return payment
+
+
+# --- Settle an invoice from customer advances --------------------------------
+
+
+async def advance_position(
+    db: AsyncSession, account_id: uuid.UUID, currency: str, as_of: date
+) -> tuple[Decimal, Decimal, bool]:
+    """Credit balance of a liability as of ``as_of``: (native, SGD at posted rates, has_unrated).
+
+    Counts every confirmed line in the account's currency (rated or not); the SGD
+    figure is only meaningful when ``has_unrated`` is False.
+    """
+    rows = (
+        await db.execute(
+            select(JournalLine.debit, JournalLine.credit, JournalLine.fx_rate_to_sgd)
+            .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+            .where(
+                JournalLine.account_id == account_id,
+                JournalLine.currency == currency,
+                JournalEntry.is_confirmed.is_(True),
+                JournalEntry.entry_date <= as_of,
+            )
+        )
+    ).all()
+    native = Decimal("0")
+    sgd = Decimal("0")
+    has_unrated = False
+    for debit, credit, rate in rows:
+        movement = Decimal(str(credit)) - Decimal(str(debit))
+        native += movement
+        if rate is None:
+            has_unrated = True
+        else:
+            sgd += movement * Decimal(str(rate))
+    return native, sgd, has_unrated
+
+
+def build_advance_settlement_lines(
+    amount: Decimal,
+    currency: str,
+    advance_account_id: uuid.UUID,
+    advance_rate: Decimal,
+    receivable_amount: Decimal,
+    receivable_currency: str,
+    receivable_rate: Decimal,
+    receivable_id: uuid.UUID,
+    revenue_id: uuid.UUID,
+    label: str,
+) -> list[JournalLineCreate]:
+    """Dr customer advance (advance-date rate) / Cr receivable (invoice rate) ± revenue.
+
+    SFRS(I) INT 1-22 / IFRIC 22: revenue settled from an advance is measured at the
+    rate on the date the advance was received, so the difference to the receivable's
+    issue-date rate adjusts revenue — it is not an FX gain or loss.
+    """
+    lines = [
+        JournalLineCreate(
+            account_id=advance_account_id,
+            debit=amount,
+            currency=currency,
+            fx_rate_to_sgd=advance_rate,
+            description=f"Apply customer advance to {label}",
+        ),
+        JournalLineCreate(
+            account_id=receivable_id,
+            credit=receivable_amount,
+            currency=receivable_currency,
+            fx_rate_to_sgd=receivable_rate,
+            description=f"Settle receivable {label}",
+        ),
+    ]
+    diff = q_sgd(amount * advance_rate - receivable_amount * receivable_rate)
+    if diff != 0:
+        lines.append(
+            JournalLineCreate(
+                account_id=revenue_id,
+                debit=-diff if diff < 0 else Decimal("0"),
+                credit=diff if diff > 0 else Decimal("0"),
+                currency=FUNCTIONAL_CURRENCY,
+                fx_rate_to_sgd=Decimal("1"),
+                description=f"Revenue at advance-date rate (IFRIC 22): {label}",
+            )
+        )
+    return lines
+
+
+async def _issue_revenue_account(db: AsyncSession, invoice: Invoice) -> uuid.UUID:
+    """The revenue account credited by the invoice's issue entry (independent of the current mapping)."""
+    row = (
+        await db.execute(
+            select(JournalLine.account_id)
+            .join(Account, JournalLine.account_id == Account.id)
+            .where(
+                JournalLine.journal_entry_id == invoice.journal_entry_id,
+                JournalLine.credit > 0,
+                Account.account_class == "revenue",
+            )
+        )
+    ).first()
+    if row is None:
+        raise ValueError(f"Invoice {invoice.invoice_number} issue entry has no revenue line")
+    return row[0]
+
+
+async def apply_customer_advance(
+    db: AsyncSession,
+    invoice_id: uuid.UUID,
+    advance_account_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    advance_sgd_value: Optional[Decimal] = None,
+    payment_date: Optional[date] = None,
+    notes: Optional[str] = None,
+) -> Payment:
+    """Settle an issued invoice in full from amounts already received as customer advances.
+
+    ``advance_sgd_value`` is the SGD value of the advances consumed (at their receipt-date
+    rates); without it the advance account's average carrying rate is used. Records an
+    ``advance`` payment, posts the settlement entry, and marks the invoice paid.
+    """
+    from app.services import invoice as invoice_service
+    from app.services import payment as payment_service
+
+    invoice = await invoice_service.get_invoice(db, invoice_id)
+    if invoice is None:
+        raise ValueError(f"Invoice {invoice_id} not found")
+    await lock_invoice(db, invoice_id)
+    if invoice.status != "issued":
+        raise ValueError(f"Invoice must be 'issued' to apply an advance, current: {invoice.status}")
+    if await receivable_settled(db, invoice.id):
+        raise ValueError(f"Invoice {invoice.invoice_number} receivable is already settled")
+
+    advance = await _require_account(
+        db, advance_account_id, "Customer advance", currency=invoice.currency, classes={"liability"}
+    )
+    # Serialise consumers of the same advance account.
+    await db.execute(select(Account.id).where(Account.id == advance.id).with_for_update())
+    if Decimal(str(invoice.tax_amount or 0)) > 0:
+        raise ValueError(
+            "Invoices with GST cannot be settled from advances automatically (the GST time of supply may "
+            "follow the prepayment); post the settlement manually"
+        )
+    if invoice.issue_date is None:
+        raise ValueError(f"Invoice {invoice.invoice_number} has no issue date")
+    settled_on = payment_date or invoice.issue_date
+    if settled_on < invoice.issue_date:
+        raise ValueError("payment_date cannot be before the invoice issue date")
+
+    ar_line = await receivable_line(db, invoice)
+    revenue_id = await _issue_revenue_account(db, invoice)
+
+    total = Decimal(str(invoice.total_amount))
+    # IFRIC 22 covers only consideration received before the revenue was recognised.
+    available, carrying_sgd, has_unrated = await advance_position(
+        db, advance.id, invoice.currency, invoice.issue_date
+    )
+    if available < total:
+        raise ValueError(
+            f"Customer advance {advance.name} holds {invoice.currency} {available} received on or before "
+            f"{invoice.issue_date}, less than invoice total {total}"
+        )
+
+    if invoice.currency == FUNCTIONAL_CURRENCY:
+        advance_rate = Decimal("1")
+        source = "advance (SGD)"
+    elif advance_sgd_value is not None:
+        if advance_sgd_value <= 0:
+            raise ValueError("advance_sgd_value must be positive")
+        if not has_unrated:
+            if advance_sgd_value > q_sgd(carrying_sgd) + Decimal("0.01"):
+                raise ValueError(
+                    f"advance_sgd_value {advance_sgd_value} exceeds the advances' carrying value SGD {q_sgd(carrying_sgd)}"
+                )
+            if total == available and abs(advance_sgd_value - carrying_sgd) > Decimal("0.01"):
+                raise ValueError(
+                    f"Consuming the whole advance balance: advance_sgd_value must equal its carrying value "
+                    f"SGD {q_sgd(carrying_sgd)}"
+                )
+            implied = advance_sgd_value / total
+            average = carrying_sgd / available
+            if abs(implied - average) > average * Decimal("0.05"):
+                raise ValueError(
+                    f"advance_sgd_value implies {q_rate(implied)} SGD per {invoice.currency}, more than 5% from the "
+                    f"advances' average {q_rate(average)}"
+                )
+        advance_rate = q_rate(advance_sgd_value / total)
+        source = "advance (specified)"
+    else:
+        if has_unrated:
+            raise ValueError(
+                f"{advance.name} has lines without an SGD rate; pass advance_sgd_value for the advances consumed"
+            )
+        advance_rate = q_rate(carrying_sgd / available)
+        source = "advance (average carrying rate)"
+
+    label = invoice.invoice_number or str(invoice.id)
+    payment = await payment_service.record_payment(
+        db,
+        PaymentCreate(
+            payment_type="advance",
+            related_entity_type="invoice",
+            related_entity_id=invoice.id,
+            payment_date=settled_on,
+            currency=invoice.currency,
+            amount=total,
+            fx_rate_to_sgd=advance_rate,
+            fx_rate_date=settled_on,
+            fx_rate_source=source,
+            notes=notes or f"Settled from customer advances ({advance.name})",
+        ),
+        created_by=actor_id,
+    )
+    lines = build_advance_settlement_lines(
+        amount=total,
+        currency=invoice.currency,
+        advance_account_id=advance.id,
+        advance_rate=advance_rate,
+        receivable_amount=Decimal(str(ar_line.debit)),
+        receivable_currency=ar_line.currency,
+        receivable_rate=Decimal(str(ar_line.fx_rate_to_sgd)),
+        receivable_id=ar_line.account_id,
+        revenue_id=revenue_id,
+        label=label,
+    )
+    entry = await create_journal_entry(
+        db,
+        JournalEntryCreate(
+            entry_date=settled_on,
+            description=f"Invoice {label} settled from customer advances @ {advance_rate} SGD",
+            source_type="payment",
+            source_id=payment.id,
+            is_confirmed=True,
+            lines=lines,
+        ),
+        created_by=actor_id,
+    )
+    payment.journal_entry_id = entry.id
+    await db.flush()
+    await AuditService(db).log(
+        action="invoice.apply_advance",
+        entity_type="invoice",
+        entity_id=invoice.id,
+        actor_id=actor_id,
+        output_data={
+            "payment_id": str(payment.id),
+            "journal_entry_id": str(entry.id),
+            "advance_account_id": str(advance.id),
+            "advance_rate": str(advance_rate),
+        },
+    )
+    await invoice_service.mark_paid(db=db, invoice=invoice, payment_id=payment.id, user_id=actor_id)
+    return payment
