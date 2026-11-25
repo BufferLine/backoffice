@@ -13,6 +13,7 @@ from app.schemas.payment import (
     OnchainVerifyRequest,
     PaymentCreate,
     PaymentLinkRequest,
+    PaymentNotesUpdate,
     PaymentListResponse,
     PaymentPipelineRequest,
     PaymentPipelineResponse,
@@ -181,6 +182,20 @@ async def get_payment(
 ) -> PaymentResponse:
     try:
         payment = await payment_svc.get_payment(db, payment_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    return PaymentResponse.model_validate(payment)
+
+
+@router.patch("/{payment_id}/notes", response_model=PaymentResponse)
+async def update_payment_notes(
+    payment_id: uuid.UUID,
+    data: PaymentNotesUpdate,
+    current_user: Annotated[AuthenticatedUser, Depends(require_permission("payment:write"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PaymentResponse:
+    try:
+        payment = await payment_svc.update_payment_notes(db, payment_id, data.notes, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     return PaymentResponse.model_validate(payment)

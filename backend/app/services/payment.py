@@ -179,6 +179,32 @@ async def get_payment(db: AsyncSession, payment_id: uuid.UUID) -> Payment:
     return payment
 
 
+async def update_payment_notes(
+    db: AsyncSession, payment_id: uuid.UUID, notes: Optional[str], actor_id: uuid.UUID
+) -> Payment:
+    """Change a payment's free-text notes. Amounts, dates and links are never editable."""
+    from app.services.changelog import track_changes
+
+    result = await db.execute(select(Payment).where(Payment.id == payment_id).with_for_update())
+    payment = result.scalar_one_or_none()
+    if payment is None:
+        raise ValueError(f"Payment {payment_id} not found")
+    notes = (notes or "").strip() or None
+    old = payment.notes
+    payment.notes = notes
+    await db.flush()
+    await track_changes(db, "payment", payment.id, {"notes": old}, {"notes": notes}, changed_by=actor_id)
+    await AuditService(db).log(
+        action="update_notes",
+        entity_type="payment",
+        entity_id=payment.id,
+        actor_id=actor_id,
+        input_data={"notes": notes},
+        output_data={"previous_notes": old},
+    )
+    return payment
+
+
 async def list_payments(
     db: AsyncSession,
     entity_type: Optional[str] = None,

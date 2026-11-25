@@ -5,7 +5,7 @@ from typing import Optional
 import typer
 
 from acct.amounts import decimal_amount
-from acct.api_client import api_get, api_post
+from acct.api_client import api_get, api_patch, api_post
 from acct.formatters import print_json, print_success, print_table
 
 app = typer.Typer(help="Payment recording commands")
@@ -178,6 +178,16 @@ def show(
     """Show payment details."""
     data = api_get(f"/api/payments/{payment_id}")
     print_json(data)
+
+
+@app.command()
+def note(
+    payment_id: str = typer.Argument(..., help="Payment ID"),
+    notes: str = typer.Option(..., "--notes", help="New notes text (empty string clears it)"),
+) -> None:
+    """Replace a payment's notes (shown on a paid invoice's PDF). Audit-logged."""
+    data = api_patch(f"/api/payments/{payment_id}/notes", json_data={"notes": notes})
+    print_success(f"Notes updated for payment {data['id']}")
 
 
 @app.command()
