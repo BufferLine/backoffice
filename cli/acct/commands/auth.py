@@ -3,6 +3,7 @@ from typing import Optional
 import typer
 
 from acct.api_client import api_delete, api_get, api_post
+from acct import config
 from acct.config import clear_credentials, get_api_url, save_credentials
 from acct.formatters import print_json, print_success, print_table, print_error
 
@@ -15,20 +16,27 @@ def login(
     password: str = typer.Option(None, help="Password", hide_input=True),
     token: str = typer.Option(None, help="API token (alternative to email/password)"),
     api_url: str = typer.Option("http://localhost:8000", help="API base URL"),
+    replace: bool = typer.Option(False, "--replace", help="Point this profile at --api-url even if it is logged in elsewhere"),
 ) -> None:
     """Login with email/password or API token."""
+    try:
+        config.check_login_target(api_url, replace)
+    except config.ProfileError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    where = f" (profile: {config.current_profile()}, {api_url})"
     if token:
         save_credentials(token, api_url)
         # Verify the token works
         data = api_get("/api/auth/me")
-        print_success(f"Logged in as {data['email']} (via API token)")
+        print_success(f"Logged in as {data['email']} (via API token){where}")
     elif email and password:
         save_credentials("", api_url)
         resp = api_post("/api/auth/login", json_data={"email": email, "password": password})
         access_token = resp.get("access_token", "")
         refresh_token = resp.get("refresh_token")
         save_credentials(access_token, api_url, refresh_token=refresh_token)
-        print_success(f"Logged in as {email}")
+        print_success(f"Logged in as {email}{where}")
     else:
         # Interactive prompts
         if not email:
@@ -40,7 +48,7 @@ def login(
         access_token = resp.get("access_token", "")
         refresh_token = resp.get("refresh_token")
         save_credentials(access_token, api_url, refresh_token=refresh_token)
-        print_success(f"Logged in as {email}")
+        print_success(f"Logged in as {email}{where}")
 
 
 @app.command()
@@ -53,6 +61,7 @@ def logout() -> None:
 @app.command()
 def whoami() -> None:
     """Show current user info."""
+    typer.echo(f"Profile: {config.current_profile()} · Server: {get_api_url()}", err=True)
     data = api_get("/api/auth/me")
     print_json(data)
 
