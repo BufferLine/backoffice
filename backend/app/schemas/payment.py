@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PaymentCreate(BaseModel):
@@ -81,6 +81,10 @@ class PaymentResponse(BaseModel):
 class PaymentListResponse(BaseModel):
     items: list[PaymentResponse]
     total: int
+
+
+class PaymentNotesUpdate(BaseModel):
+    notes: Optional[str] = Field(default=None, max_length=2000)
 
 
 class PaymentLinkRequest(BaseModel):

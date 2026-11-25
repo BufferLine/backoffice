@@ -113,7 +113,7 @@ def apply_advance(
         help="SGD value of the advances consumed at their receipt-date rates (default: average carrying rate)",
         callback=decimal_amount,
     ),
-    date: Optional[str] = typer.Option(None, "--date", help="Settlement date YYYY-MM-DD (default today)"),
+    date: Optional[str] = typer.Option(None, "--date", help="Settlement date YYYY-MM-DD (default: the invoice issue date)"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Payment notes"),
 ) -> None:
     """Settle an issued invoice from customer advances received before it (marks it paid).

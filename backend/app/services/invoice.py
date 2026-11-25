@@ -479,6 +479,13 @@ async def issue_invoice(
     return invoice
 
 
+_PAYMENT_METHOD_LABELS = {
+    "advance": "Applied from customer advance",
+    "crypto": "Stablecoin transfer",
+    "bank_transfer": "Bank transfer",
+}
+
+
 async def _generate_invoice_pdf(
     db: AsyncSession,
     invoice: Invoice,
@@ -580,6 +587,27 @@ async def _generate_invoice_pdf(
     # Backward-compat single payment_details (first entry)
     payment_details = payment_methods_data[0] if payment_methods_data else None
 
+    # A paid invoice shows what was received instead of payment instructions.
+    payments_data: list[dict] = []
+    if invoice.status == "paid":
+        paid_rows = await db.execute(
+            select(Payment)
+            .where(Payment.related_entity_type == "invoice", Payment.related_entity_id == invoice.id)
+            .order_by(Payment.payment_date, Payment.created_at)
+        )
+        payments_data = [
+            {
+                "payment_date": p.payment_date,
+                "amount": p.amount,
+                "currency": p.currency,
+                "method": _PAYMENT_METHOD_LABELS.get(p.payment_type, p.payment_type.replace("_", " ").title()),
+                "tx_hash": p.tx_hash,
+                "chain_id": p.chain_id,
+                "notes": p.notes,
+            }
+            for p in paid_rows.scalars()
+        ]
+
     # Check if any non-SR tax codes are present for the GST breakdown section
     has_mixed_tax_codes = len({item["tax_code"] for item in line_items_data}) > 1
 
@@ -597,7 +625,9 @@ async def _generate_invoice_pdf(
             "description": invoice.description,
             "payment_method": invoice.payment_method,
             "wallet_address": invoice.wallet_address,
+            "status": invoice.status,
         },
+        "payments": payments_data,
         "company": company_data,
         "client": client_data,
         "line_items": line_items_data,
@@ -743,10 +773,15 @@ async def regenerate_invoice_pdf(
     user_id: uuid.UUID,
     file_storage: FileStorageService,
 ) -> Invoice:
-    """Regenerate the PDF for an issued invoice with current company branding."""
-    if invoice.status != "issued":
-        raise ValueError("Can only regenerate PDF for issued invoices")
+    """Regenerate the PDF for an issued or paid invoice with current branding.
 
+    A paid invoice's PDF is marked PAID and lists the payments received. The previous
+    PDF file is kept (only the pointer moves) and its id is recorded in the audit log.
+    """
+    if invoice.status not in ("issued", "paid"):
+        raise ValueError("Can only regenerate PDF for issued or paid invoices")
+
+    previous_file_id = invoice.issued_pdf_file_id
     company = await _get_company_settings(db)
     new_file_id = await _generate_invoice_pdf(db, invoice, company, file_storage)
     invoice.issued_pdf_file_id = new_file_id
@@ -758,7 +793,8 @@ async def regenerate_invoice_pdf(
         entity_type="invoice",
         entity_id=invoice.id,
         actor_id=user_id,
-        output_data={"issued_pdf_file_id": str(new_file_id)},
+        input_data={"previous_pdf_file_id": str(previous_file_id) if previous_file_id else None},
+        output_data={"issued_pdf_file_id": str(new_file_id), "status": invoice.status},
     )
 
     return invoice
