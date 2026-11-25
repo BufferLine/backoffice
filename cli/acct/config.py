@@ -1,8 +1,11 @@
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
-CONFIG_DIR = Path.home() / ".acct"
+# ACCT_CONFIG_DIR lets scripts (e.g. scripts/e2e-cli.sh) use throwaway credentials
+# without overwriting the operator's own ~/.acct login.
+CONFIG_DIR = Path(os.environ.get("ACCT_CONFIG_DIR") or Path.home() / ".acct")
 CREDENTIALS_FILE = CONFIG_DIR / "credentials.json"
 DEFAULT_API_URL = "http://localhost:8000"
 
