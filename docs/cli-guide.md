@@ -66,7 +66,22 @@ acct login [--email EMAIL] [--api-url URL]
 acct login --email admin@example.com --api-url https://backoffice.example.com
 ```
 
-Prompts for password. Token is saved to `~/.acct/credentials.json`.
+Prompts for password. Token is saved to `~/.acct/credentials.json` (the `default` profile).
+
+### Profiles (`--profile`, `ACCT_PROFILE`)
+
+Keep one login per server so a dev login never replaces your production login:
+
+```bash
+acct login --email admin@example.com --api-url https://backoffice.example.com   # default profile
+acct --profile local login --email admin@example.com --api-url http://localhost:8000
+acct --profile local invoice list      # or: export ACCT_PROFILE=local
+acct profiles                          # list profiles and their servers (* = active)
+```
+
+Named profiles are stored in `~/.acct/profiles/<name>.json`. Logging a profile in to a
+different server than the one it already uses is refused; use another profile, or pass
+`--replace` to repoint it. `acct whoami` prints the active profile and server on stderr.
 
 ### `acct whoami`
 

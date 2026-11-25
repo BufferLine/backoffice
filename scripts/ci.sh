@@ -70,7 +70,7 @@ echo "Using $(python --version) at $(command -v python)"
 
 # ── Phase 1: Unit Tests (no server needed) ──
 step "Phase 1: Unit Tests"
-if python -m pytest backend/tests/unit/ -q --tb=short 2>&1; then
+if python -m pytest backend/tests/unit/ -q --tb=short 2>&1 && (cd cli && python -m pytest tests -q --tb=short 2>&1); then
   ok "Unit tests passed"
 else
   err "Unit tests failed"

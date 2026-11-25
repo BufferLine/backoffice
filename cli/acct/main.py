@@ -8,14 +8,37 @@ from acct.commands import payment_method
 from acct.commands import integration, loan
 from acct.commands import journal, report, fx, ledger
 from acct.api_client import api_post
+from acct import config
 from acct.config import save_credentials
-from acct.formatters import print_success
+from acct.formatters import print_error, print_success
 
 app = typer.Typer(
     name="acct",
     help="Backoffice Operations CLI\n\n"
     "AI agents: run 'acct guide' first to understand the system and build your own memory/rules.",
 )
+
+
+@app.callback()
+def _select_profile(
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", envvar="ACCT_PROFILE",
+        help="Credentials profile, e.g. 'local' for a dev server. Default: the 'default' profile.",
+    ),
+) -> None:
+    try:
+        config.set_profile(profile)
+    except config.ProfileError as e:
+        print_error(str(e))
+        raise typer.Exit(2)
+
+
+def _guard_login_target(api_url: str, replace: bool) -> None:
+    try:
+        config.check_login_target(api_url, replace)
+    except config.ProfileError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
 
 app.add_typer(client.app, name="client")
 app.add_typer(auth.app, name="auth")
@@ -144,8 +167,10 @@ def init(
     admin_password: str = typer.Option(None, "--admin-password", help="Admin password"),
     admin_name: str = typer.Option(None, "--admin-name", help="Admin display name"),
     api_url: str = typer.Option("http://localhost:8000", "--api-url"),
+    replace: bool = typer.Option(False, "--replace", help="Point this profile at --api-url even if it is logged in elsewhere"),
 ) -> None:
     """Initialize the backoffice system. Options are prompted interactively if not provided."""
+    _guard_login_target(api_url, replace)
     if not company_name:
         company_name = typer.prompt("Company name")
     if not jurisdiction:
@@ -198,9 +223,10 @@ def login(
     password: str = typer.Option(None, help="Password", hide_input=True),
     token: str = typer.Option(None, help="API token (alternative to email/password)"),
     api_url: str = typer.Option("http://localhost:8000", help="API base URL"),
+    replace: bool = typer.Option(False, "--replace", help="Point this profile at --api-url even if it is logged in elsewhere"),
 ) -> None:
-    """Login to the backoffice system."""
-    auth.login(email=email, password=password, token=token, api_url=api_url)
+    """Login to the backoffice system (into the profile selected by --profile)."""
+    auth.login(email=email, password=password, token=token, api_url=api_url, replace=replace)
 
 
 @app.command()
@@ -213,3 +239,17 @@ def logout() -> None:
 def whoami() -> None:
     """Show current user info."""
     auth.whoami()
+
+
+@app.command()
+def profiles() -> None:
+    """List saved credential profiles and the server each points at."""
+    rows = config.list_profiles()
+    if not rows:
+        typer.echo("No profiles saved. Log in with: acct [--profile NAME] login --api-url URL")
+        return
+    active = config.current_profile()
+    for r in rows:
+        mark = "*" if r["profile"] == active else " "
+        state = "" if r["logged_in"] else "  (logged out)"
+        typer.echo(f"{mark} {r['profile']:<12} {r['api_url']}{state}")

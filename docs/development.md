@@ -43,10 +43,14 @@ cd ..
 ### Initialize the system
 
 ```bash
-acct init --api-url http://localhost:8000
+acct --profile local init --api-url http://localhost:8000
 # Open the printed URL to create your admin account
-acct login --email admin@example.com --api-url http://localhost:8000
+acct --profile local login --email admin@example.com --api-url http://localhost:8000
+export ACCT_PROFILE=local   # this shell now talks to the dev server
 ```
+
+Use the `local` profile for the dev server so your production login (the `default`
+profile) is never overwritten. `acct profiles` shows which server each profile uses.
 
 ---
 
