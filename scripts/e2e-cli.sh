@@ -10,6 +10,9 @@ source backend/.venv/bin/activate 2>/dev/null || true
 
 # Disable Rich colour output so we can parse JSON cleanly
 export NO_COLOR=1
+# Log in with throwaway credentials so the operator's ~/.acct (e.g. a production
+# login) is never overwritten by the local test server's login.
+export ACCT_CONFIG_DIR="${ACCT_CONFIG_DIR:-$(mktemp -d -t acct-e2e)}"
 
 API_URL="${API_URL:-${API_BASE_URL:-http://localhost:8000}}"
 PASS=0
@@ -569,7 +572,7 @@ echo "[13. Safety Controls]"
 if [ -n "${INV_ID:-}" ]; then
   # Try to re-issue an already-issued invoice — should fail with 409
   ACCESS_TOKEN=$(python3 -c \
-    "import json; creds=json.load(open('$HOME/.acct/credentials.json')); print(creds.get('token',''))" \
+    "import json; creds=json.load(open('$ACCT_CONFIG_DIR/credentials.json')); print(creds.get('token',''))" \
     2>/dev/null || echo "")
   if [ -n "$ACCESS_TOKEN" ]; then
     BAD_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -590,7 +593,7 @@ fi
 
 if [ -n "${PAY_ID:-}" ]; then
   ACCESS_TOKEN=$(python3 -c \
-    "import json; creds=json.load(open('$HOME/.acct/credentials.json')); print(creds.get('token',''))" \
+    "import json; creds=json.load(open('$ACCT_CONFIG_DIR/credentials.json')); print(creds.get('token',''))" \
     2>/dev/null || echo "")
   if [ -n "$ACCESS_TOKEN" ]; then
     BAD_STATUS2=$(curl -s -o /dev/null -w "%{http_code}" \
